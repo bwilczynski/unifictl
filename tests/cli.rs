@@ -256,3 +256,67 @@ fn config_check_without_config_fails_with_hint() {
     assert_eq!(v["checks"][0]["step"], "config");
     assert_eq!(v["checks"].as_array().unwrap().len(), 7);
 }
+
+fn init_in(xdg: &std::path::Path, args: &[&str]) -> Output {
+    let mut all = vec!["config", "init"];
+    all.extend_from_slice(args);
+    Command::new(env!("CARGO_BIN_EXE_unifictl"))
+        .args(&all)
+        .env_clear()
+        .env("XDG_CONFIG_HOME", xdg)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn config_init_writes_private_file_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let xdg = dir.path().join("nested/xdg");
+    let out = init_in(
+        &xdg,
+        &["--no-check", "--host", "192.168.1.1", "--api-key", "k"],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.stdout.is_empty());
+    let path = xdg.join("unifictl/config.toml");
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        format!("wrote {}\n", path.display())
+    );
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "host = \"192.168.1.1\"\napi_key = \"k\"\nsite = \"default\"\n"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
+    let out = init_in(&xdg, &["--no-check", "--host", "other", "--api-key", "k"]);
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("already exists; pass --force"), "{err}");
+}
+
+#[test]
+fn config_init_without_tty_or_flags_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = init_in(dir.path(), &["--no-check"]);
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("pass --host"), "{err}");
+}
+
+#[test]
+fn config_init_api_key_conflicts_with_username() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = init_in(dir.path(), &["--api-key", "k", "--username", "u"]);
+    assert_eq!(out.status.code(), Some(2));
+}
