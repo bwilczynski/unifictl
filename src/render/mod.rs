@@ -7,6 +7,7 @@ pub mod devices;
 pub mod format;
 pub mod ports;
 pub mod ssids;
+pub mod style;
 pub mod topology;
 pub mod vlans;
 pub mod wans;
@@ -17,7 +18,8 @@ use tabwriter::TabWriter;
 
 /// Tab-separated rows aligned like Go's `tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)`.
 /// `flush()` ends a column block (Go templates' `{{ flush }}`), so sections
-/// get independent widths.
+/// get independent widths. Cells may contain `ESC[…m` colour codes; they do
+/// not count toward width.
 pub struct Table {
     tw: TabWriter<Vec<u8>>,
 }
@@ -32,7 +34,7 @@ impl Default for Table {
 impl Table {
     pub fn new() -> Self {
         Self {
-            tw: TabWriter::new(Vec::new()).minwidth(0).padding(2),
+            tw: TabWriter::new(Vec::new()).minwidth(0).padding(2).ansi(true),
         }
     }
 
@@ -81,5 +83,13 @@ mod tests {
         t.line("--- X ---");
         t.row(&["LONGVALUE", "C"]);
         assert_eq!(t.finish(), "A  B\n\n--- X ---\nLONGVALUE  C\n");
+    }
+
+    #[test]
+    fn escape_codes_do_not_count_toward_width() {
+        let mut t = Table::new();
+        t.row(&["\x1b[32mup\x1b[0m", "x"]);
+        t.row(&["down", "y"]);
+        assert_eq!(t.finish(), "\x1b[32mup\x1b[0m    x\ndown  y\n");
     }
 }

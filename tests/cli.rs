@@ -50,6 +50,82 @@ mod with_fixtures {
         String::from_utf8(o.stdout.clone()).unwrap()
     }
 
+    /// Drops `ESC [ … m` sequences.
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::new();
+        let mut chars = s.chars();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                for c in chars.by_ref() {
+                    if c == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn color_always_paints_without_moving_columns() {
+        for args in [
+            &["devices", "list"][..],
+            &["devices", "get", "us-8", "--all-ports"],
+            &["clients", "list"],
+            &["clients", "get", "nas-1-0002"],
+            &["ports", "list", "--all-ports"],
+            &["wans", "list"],
+            &["wans", "get", "internet-2"],
+            &["topology", "--include-clients"],
+        ] {
+            let plain = stdout(&run(args));
+            let mut colored_args = vec!["--color", "always"];
+            colored_args.extend(args);
+            let o = run(&colored_args);
+            assert!(o.status.success(), "{args:?}");
+            let colored = stdout(&o);
+            assert!(colored.contains("\x1b["), "{args:?}: not coloured");
+            assert_eq!(strip_ansi(&colored), plain, "{args:?}: layout changed");
+        }
+    }
+
+    #[test]
+    fn colours_follow_status() {
+        let wans = stdout(&run(&["--color", "always", "wans", "list"]));
+        assert!(wans.contains("\x1b[32mconnected\x1b[0m"));
+        assert!(wans.contains("\x1b[31mdisconnected\x1b[0m"));
+        let clients = stdout(&run(&["--color", "always", "clients", "list"]));
+        assert!(clients.contains("\x1b[32monline\x1b[0m"));
+        assert!(clients.contains("\x1b[2moffline\x1b[0m"));
+        let ports = stdout(&run(&["--color", "always", "ports", "list", "--all-ports"]));
+        assert!(ports.contains("\x1b[32mup\x1b[0m"));
+        assert!(ports.contains("\x1b[2mdown\x1b[0m"));
+        let topo = stdout(&run(&[
+            "--color",
+            "always",
+            "topology",
+            "--include-clients",
+        ]));
+        assert!(topo.contains("(client, wired, \x1b[2moffline\x1b[0m)"));
+    }
+
+    #[test]
+    fn piped_json_and_never_are_plain() {
+        assert!(!stdout(&run(&["devices", "list"])).contains('\x1b'));
+        assert!(!stdout(&run(&["--color", "never", "devices", "list"])).contains('\x1b'));
+        let o = run(&["--color", "always", "-o", "json", "devices", "list"]);
+        assert!(!stdout(&o).contains('\x1b'));
+        serde_json::from_slice::<serde_json::Value>(&o.stdout).expect("valid JSON");
+    }
+
+    #[test]
+    fn color_flag_works_after_subcommand() {
+        let o = run(&["wans", "list", "--color", "always"]);
+        assert!(stdout(&o).contains("\x1b[31mdisconnected"));
+    }
+
     #[test]
     fn devices_list_table_and_json() {
         let o = run(&["devices", "list"]);

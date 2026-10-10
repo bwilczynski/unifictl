@@ -2,9 +2,10 @@
 
 use super::Table;
 use super::format::{format_link_speed, format_uptime};
+use super::style;
 use crate::model::{NetworkClientDetail, NetworkClientList};
 
-pub fn list(list: &NetworkClientList) -> String {
+pub fn list(list: &NetworkClientList, color: bool) -> String {
     let mut t = Table::new();
     t.row(&["ID", "NAME", "MAC", "IP", "STATUS", "CONNECTION"]);
     for c in &list.items {
@@ -13,14 +14,14 @@ pub fn list(list: &NetworkClientList) -> String {
             &c.name,
             &c.mac,
             c.ip.as_deref().unwrap_or(""),
-            c.status.as_str(),
+            &style::client_status(c.status, color),
             c.connection_type.as_str(),
         ]);
     }
     t.finish()
 }
 
-pub fn get(detail: &NetworkClientDetail) -> String {
+pub fn get(detail: &NetworkClientDetail, color: bool) -> String {
     let mut t = Table::new();
     t.row(&["FIELD", "VALUE"]);
     match detail {
@@ -32,7 +33,7 @@ pub fn get(detail: &NetworkClientDetail) -> String {
                 &c.mac,
                 c.ip.as_deref(),
                 c.connection_type.as_str(),
-                c.status.as_str(),
+                &style::client_status(c.status, color),
             );
             t.row(&["SWITCH", &c.connected_to.device.name]);
             if let Some(port) = c.connected_to.port {
@@ -53,7 +54,7 @@ pub fn get(detail: &NetworkClientDetail) -> String {
                 &c.mac,
                 c.ip.as_deref(),
                 c.connection_type.as_str(),
-                c.status.as_str(),
+                &style::client_status(c.status, color),
             );
             t.row(&["AP", &c.connected_to.device.name]);
             t.row(&["SSID", &c.connected_to.ssid]);
@@ -100,14 +101,14 @@ mod tests {
 
     #[test]
     fn list_rows() {
-        let out = list(&svc().list_clients(None).unwrap());
+        let out = list(&svc().list_clients(None).unwrap(), false);
         assert!(out.starts_with("ID"));
         assert_eq!(out.lines().count(), 6);
     }
 
     #[test]
     fn wired_detail_fields() {
-        let out = get(&svc().get_client("nas-1-0002").unwrap());
+        let out = get(&svc().get_client("nas-1-0002").unwrap(), false);
         let field = |name: &str| {
             out.lines()
                 .find(|l| l.starts_with(name))
@@ -121,7 +122,7 @@ mod tests {
 
     #[test]
     fn offline_wireless_detail_omits_signal_and_uptime() {
-        let out = get(&svc().get_client("kindle-paperwhite-bb04").unwrap());
+        let out = get(&svc().get_client("kindle-paperwhite-bb04").unwrap(), false);
         assert!(
             out.lines()
                 .any(|l| l.starts_with("AP") && l.ends_with("UAP-01"))

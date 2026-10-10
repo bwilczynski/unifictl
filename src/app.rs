@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -6,8 +7,8 @@ use serde::Serialize;
 
 use crate::cache::Cache;
 use crate::cli::{
-    Cli, ClientsCommand, Command, ConfigCommand, DevicesCommand, LookupCommand, ModeFilter,
-    OutputFormat, PortsCommand, StateFilter, StatusFilter,
+    Cli, ClientsCommand, ColorMode, Command, ConfigCommand, DevicesCommand, LookupCommand,
+    ModeFilter, OutputFormat, PortsCommand, StateFilter, StatusFilter,
 };
 use crate::completion;
 use crate::config;
@@ -80,11 +81,32 @@ pub fn run(cli: Cli) -> Result<Outcome> {
             )));
         }
         Command::Completions { shell } => return completion::script(*shell).map(Outcome::ok),
-        Command::Config { command } => return run_config(command, &cli, &env),
         _ => {}
     }
+    let color = color_enabled(cli.color, cli.output, std::io::stdout().is_terminal(), &env);
+    if let Command::Config { command } = &cli.command {
+        return run_config(command, &cli, &env, color);
+    }
     let svc = build_service(&cli)?;
-    execute(&svc, &cli.command, cli.output).map(Outcome::ok)
+    execute(&svc, &cli.command, cli.output, color).map(Outcome::ok)
+}
+
+/// Tables only; under `auto`, only on a terminal and with `NO_COLOR` unset or
+/// empty (no-color.org).
+fn color_enabled(
+    mode: ColorMode,
+    out: OutputFormat,
+    is_tty: bool,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> bool {
+    if out != OutputFormat::Table {
+        return false;
+    }
+    match mode {
+        ColorMode::Always => true,
+        ColorMode::Never => false,
+        ColorMode::Auto => is_tty && env("NO_COLOR").is_none_or(|v| v.is_empty()),
+    }
 }
 
 /// The config file in effect, and whether the user named it.
@@ -101,6 +123,7 @@ fn run_config(
     cmd: &ConfigCommand,
     cli: &Cli,
     env: &dyn Fn(&str) -> Option<String>,
+    color: bool,
 ) -> Result<Outcome> {
     let (path, explicit) = config_location(cli.config.as_deref(), env);
     if let ConfigCommand::Init(args) = cmd {
@@ -112,7 +135,7 @@ fn run_config(
     let report = setup::check::run(&path, explicit, env);
     let code = if report.ok { 0 } else { 1 };
     Ok(Outcome {
-        stdout: emit(cli.output, &report, render::check::table)?,
+        stdout: emit(cli.output, &report, |r| render::check::table(r, color))?,
         code,
     })
 }
@@ -163,12 +186,14 @@ pub(crate) fn controller_service(
     Ok((svc, loaded.warnings))
 }
 
-pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat) -> Result<String> {
+pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> Result<String> {
     match cmd {
         Command::Devices { command } => match command {
-            DevicesCommand::List => emit(out, &svc.list_devices()?, render::devices::list),
+            DevicesCommand::List => emit(out, &svc.list_devices()?, |l| {
+                render::devices::list(l, color)
+            }),
             DevicesCommand::Get { id, all_ports } => emit(out, &svc.get_device(id)?, |d| {
-                render::devices::get(d, *all_ports)
+                render::devices::get(d, *all_ports, color)
             }),
         },
         Command::Clients { command } => match command {
@@ -177,9 +202,13 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat) -> Result<String
                     StatusFilter::Online => ClientStatus::Online,
                     StatusFilter::Offline => ClientStatus::Offline,
                 });
-                emit(out, &svc.list_clients(status)?, render::clients::list)
+                emit(out, &svc.list_clients(status)?, |l| {
+                    render::clients::list(l, color)
+                })
             }
-            ClientsCommand::Get { id } => emit(out, &svc.get_client(id)?, render::clients::get),
+            ClientsCommand::Get { id } => emit(out, &svc.get_client(id)?, |c| {
+                render::clients::get(c, color)
+            }),
         },
         Command::Topology {
             include_clients,
@@ -188,7 +217,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat) -> Result<String
             let topo = svc.get_topology(*include_clients || *include_wireless)?;
             match out {
                 OutputFormat::Json => json(&topo),
-                OutputFormat::Table => render::topology::tree(&topo, *include_wireless),
+                OutputFormat::Table => render::topology::tree(&topo, *include_wireless, color),
             }
         }
         Command::Ports {
@@ -213,7 +242,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat) -> Result<String
                 vlan_id: (args.vlan > 0).then_some(args.vlan),
             };
             emit(out, &svc.list_ports(&filter)?, |l| {
-                render::ports::list_table(l, args.wide)
+                render::ports::list_table(l, args.wide, color)
             })
         }
         Command::Vlans { command } => match command {
@@ -225,8 +254,10 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat) -> Result<String
             LookupCommand::Get { id } => emit(out, &svc.get_ssid(id)?, render::ssids::get),
         },
         Command::Wans { command } => match command {
-            LookupCommand::List => emit(out, &svc.list_wans()?, render::wans::list),
-            LookupCommand::Get { id } => emit(out, &svc.get_wan(id)?, render::wans::get),
+            LookupCommand::List => emit(out, &svc.list_wans()?, |l| render::wans::list(l, color)),
+            LookupCommand::Get { id } => {
+                emit(out, &svc.get_wan(id)?, |w| render::wans::get(w, color))
+            }
         },
         Command::Config { .. } => unreachable!("config commands are handled by run"),
         Command::Completions { shell } => completion::script(*shell),
@@ -250,4 +281,78 @@ fn json<T: Serialize>(value: &T) -> Result<String> {
         .map_err(|e| Error::Other(format!("encode JSON: {e}")))?;
     s.push('\n');
     Ok(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn env_with(no_color: Option<&'static str>) -> impl Fn(&str) -> Option<String> {
+        move |k| {
+            (k == "NO_COLOR")
+                .then_some(no_color)
+                .flatten()
+                .map(String::from)
+        }
+    }
+
+    #[test]
+    fn auto_colours_only_a_terminal() {
+        let none = env_with(None);
+        assert!(color_enabled(
+            ColorMode::Auto,
+            OutputFormat::Table,
+            true,
+            &none
+        ));
+        assert!(!color_enabled(
+            ColorMode::Auto,
+            OutputFormat::Table,
+            false,
+            &none
+        ));
+    }
+
+    #[test]
+    fn non_empty_no_color_disables_auto_but_empty_does_not() {
+        assert!(!color_enabled(
+            ColorMode::Auto,
+            OutputFormat::Table,
+            true,
+            &env_with(Some("1"))
+        ));
+        assert!(color_enabled(
+            ColorMode::Auto,
+            OutputFormat::Table,
+            true,
+            &env_with(Some(""))
+        ));
+    }
+
+    #[test]
+    fn always_and_never_ignore_terminal_and_no_color() {
+        let set = env_with(Some("1"));
+        assert!(color_enabled(
+            ColorMode::Always,
+            OutputFormat::Table,
+            false,
+            &set
+        ));
+        assert!(!color_enabled(
+            ColorMode::Never,
+            OutputFormat::Table,
+            true,
+            &env_with(None)
+        ));
+    }
+
+    #[test]
+    fn json_is_never_coloured() {
+        assert!(!color_enabled(
+            ColorMode::Always,
+            OutputFormat::Json,
+            true,
+            &env_with(None)
+        ));
+    }
 }

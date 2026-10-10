@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::format::format_link_speed;
+use super::style;
 use crate::error::{Error, Result};
 use crate::model::{DeviceType, NetworkTopology, TopologyEdge, TopologyNode};
 
@@ -13,7 +14,7 @@ struct Child<'a> {
 
 /// Tree rooted at the gateway. Wireless edges are drawn only when
 /// `include_wireless`; JSON output is unaffected (handled by the caller).
-pub fn tree(topo: &NetworkTopology, include_wireless: bool) -> Result<String> {
+pub fn tree(topo: &NetworkTopology, include_wireless: bool, color: bool) -> Result<String> {
     let mut display: HashMap<&str, String> = HashMap::new();
     let mut gateway: Option<&str> = None;
     for node in &topo.nodes {
@@ -31,7 +32,12 @@ pub fn tree(topo: &NetworkTopology, include_wireless: bool) -> Result<String> {
             TopologyNode::Client(c) => {
                 display.insert(
                     &c.id,
-                    format!("{} (client, {}, {})", c.name, c.connection_type, c.status),
+                    format!(
+                        "{} (client, {}, {})",
+                        c.name,
+                        c.connection_type,
+                        style::client_status(c.status, color)
+                    ),
                 );
             }
         }
@@ -122,7 +128,7 @@ mod tests {
 
     #[test]
     fn devices_tree_rooted_at_gateway() {
-        let out = tree(&topo(false), false).unwrap();
+        let out = tree(&topo(false), false, false).unwrap();
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(lines[0], "CGF-01 (gateway)");
         assert_eq!(lines.len(), 7, "gateway + 6 devices");
@@ -138,10 +144,10 @@ mod tests {
     #[test]
     fn wireless_edges_only_with_flag() {
         let t = topo(true);
-        let wired_only = tree(&t, false).unwrap();
+        let wired_only = tree(&t, false, false).unwrap();
         assert!(wired_only.contains("nas-1 (client, wired, online) [port 3, 1 GbE]"));
         assert!(!wired_only.contains("MacBook Pro"));
-        let with_wireless = tree(&t, true).unwrap();
+        let with_wireless = tree(&t, true, false).unwrap();
         assert!(
             with_wireless.contains("MacBook Pro (client, wireless, online) [homelab, -69 dBm]")
         );
@@ -155,7 +161,7 @@ mod tests {
             edges: vec![],
         };
         assert_eq!(
-            tree(&t, false).unwrap_err().to_string(),
+            tree(&t, false, false).unwrap_err().to_string(),
             "no gateway node found in topology"
         );
     }
@@ -183,7 +189,7 @@ mod tests {
             ..Default::default()
         };
         let t = Service::new(Box::new(api), 30).get_topology(false).unwrap();
-        let out = tree(&t, false).unwrap();
+        let out = tree(&t, false, false).unwrap();
         assert_eq!(out, "GW (gateway)\n└── C (switch)\n");
         // A and B only reach each other; render them as their own subtree to prove termination.
         let mut kids: HashMap<&str, Vec<Child>> = HashMap::new();
