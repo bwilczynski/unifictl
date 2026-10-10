@@ -13,7 +13,7 @@ use crate::cli::{
 use crate::completion;
 use crate::config;
 use crate::error::{Error, Result};
-use crate::model::{ClientStatus, PortState, VlanMode};
+use crate::model::{ClientStatus, Ids, PortState, VlanMode};
 use crate::render;
 use crate::service::{PortFilter, Service};
 use crate::setup;
@@ -82,6 +82,9 @@ pub fn run(cli: Cli) -> Result<Outcome> {
         }
         Command::Completions { shell } => return completion::script(*shell).map(Outcome::ok),
         _ => {}
+    }
+    if cli.output == OutputFormat::Ids && !lists_ids(&cli.command) {
+        return Err(ids_unsupported());
     }
     let color = color_enabled(cli.color, cli.output, std::io::stdout().is_terminal(), &env);
     if let Command::Config { command } = &cli.command {
@@ -189,7 +192,7 @@ pub(crate) fn controller_service(
 pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> Result<String> {
     match cmd {
         Command::Devices { command } => match command {
-            DevicesCommand::List => emit(out, &svc.list_devices()?, |l| {
+            DevicesCommand::List => emit_list(out, &svc.list_devices()?, |l| {
                 render::devices::list(l, color)
             }),
             DevicesCommand::Get { id, all_ports } => emit(out, &svc.get_device(id)?, |d| {
@@ -202,7 +205,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
                     StatusFilter::Online => ClientStatus::Online,
                     StatusFilter::Offline => ClientStatus::Offline,
                 });
-                emit(out, &svc.list_clients(status)?, |l| {
+                emit_list(out, &svc.list_clients(status)?, |l| {
                     render::clients::list(l, color)
                 })
             }
@@ -217,6 +220,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
             let topo = svc.get_topology(*include_clients || *include_wireless)?;
             match out {
                 OutputFormat::Json => json(&topo),
+                OutputFormat::Ids => Err(ids_unsupported()),
                 OutputFormat::Table => render::topology::tree(&topo, *include_wireless, color),
             }
         }
@@ -246,15 +250,17 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
             })
         }
         Command::Vlans { command } => match command {
-            LookupCommand::List => emit(out, &svc.list_vlans()?, render::vlans::list),
+            LookupCommand::List => emit_list(out, &svc.list_vlans()?, render::vlans::list),
             LookupCommand::Get { id } => emit(out, &svc.get_vlan(id)?, render::vlans::get),
         },
         Command::Ssids { command } => match command {
-            LookupCommand::List => emit(out, &svc.list_ssids()?, render::ssids::list),
+            LookupCommand::List => emit_list(out, &svc.list_ssids()?, render::ssids::list),
             LookupCommand::Get { id } => emit(out, &svc.get_ssid(id)?, render::ssids::get),
         },
         Command::Wans { command } => match command {
-            LookupCommand::List => emit(out, &svc.list_wans()?, |l| render::wans::list(l, color)),
+            LookupCommand::List => {
+                emit_list(out, &svc.list_wans()?, |l| render::wans::list(l, color))
+            }
             LookupCommand::Get { id } => {
                 emit(out, &svc.get_wan(id)?, |w| render::wans::get(w, color))
             }
@@ -273,7 +279,42 @@ fn emit<T: Serialize>(
     match out {
         OutputFormat::Json => json(value),
         OutputFormat::Table => Ok(table(value)),
+        OutputFormat::Ids => Err(ids_unsupported()),
     }
+}
+
+/// `emit` for lists, which can also print just their IDs.
+fn emit_list<T: Serialize + Ids>(
+    out: OutputFormat,
+    value: &T,
+    table: impl FnOnce(&T) -> String,
+) -> Result<String> {
+    if out == OutputFormat::Ids {
+        return Ok(value.ids().iter().map(|id| format!("{id}\n")).collect());
+    }
+    emit(out, value, table)
+}
+
+fn ids_unsupported() -> Error {
+    Error::Other("-o ids is only supported by devices, clients, vlans, ssids and wans list".into())
+}
+
+/// Commands whose output is a list of items with IDs.
+fn lists_ids(cmd: &Command) -> bool {
+    matches!(
+        cmd,
+        Command::Devices {
+            command: DevicesCommand::List
+        } | Command::Clients {
+            command: ClientsCommand::List { .. }
+        } | Command::Vlans {
+            command: LookupCommand::List
+        } | Command::Ssids {
+            command: LookupCommand::List
+        } | Command::Wans {
+            command: LookupCommand::List
+        }
+    )
 }
 
 fn json<T: Serialize>(value: &T) -> Result<String> {

@@ -121,6 +121,76 @@ mod with_fixtures {
     }
 
     #[test]
+    fn ids_output_is_one_id_per_line() {
+        let o = run(&["-o", "ids", "devices", "list"]);
+        assert!(o.status.success());
+        let out = stdout(&o);
+        assert_eq!(out.lines().count(), 7);
+        assert_eq!(out.lines().next(), Some("us-8"));
+        assert!(out.ends_with('\n'));
+        for cmd in ["clients", "vlans", "ssids", "wans"] {
+            let o = run(&["-o", "ids", cmd, "list"]);
+            assert!(o.status.success(), "{cmd}");
+            let out = stdout(&o);
+            assert!(!out.is_empty(), "{cmd}");
+            assert!(
+                out.lines().all(|l| !l.contains(' ') && l != "ID"),
+                "{cmd}: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn ids_honour_list_filters() {
+        let out = stdout(&run(&[
+            "clients", "list", "--status", "offline", "-o", "ids",
+        ]));
+        assert_eq!(out, "kindle-paperwhite-bb04\nhost-02-bb05\n");
+    }
+
+    #[test]
+    fn ids_feed_back_into_get() {
+        for cmd in ["devices", "clients", "vlans", "ssids", "wans"] {
+            let ids = stdout(&run(&["-o", "ids", cmd, "list"]));
+            assert!(!ids.is_empty(), "{cmd}: no IDs");
+            for id in ids.lines() {
+                // Listed but not gettable in the Go implementation too
+                // (tests/golden/clients-get-sonos-one-sl-l-bb03.err).
+                if id == "sonos-one-sl-l-bb03" {
+                    continue;
+                }
+                let o = run(&[cmd, "get", id]);
+                assert!(
+                    o.status.success(),
+                    "{cmd} get {id}: {}",
+                    String::from_utf8_lossy(&o.stderr)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ids_rejected_outside_list_commands() {
+        for args in [
+            &["ports", "list"][..],
+            &["devices", "get", "us-8"],
+            &["devices", "get", "nope"],
+            &["topology"],
+        ] {
+            let mut a = vec!["-o", "ids"];
+            a.extend(args);
+            let o = run(&a);
+            assert_eq!(o.status.code(), Some(1), "{args:?}");
+            assert_eq!(
+                String::from_utf8_lossy(&o.stderr),
+                "Error: -o ids is only supported by devices, clients, vlans, ssids and wans list\n",
+                "{args:?}"
+            );
+            assert!(o.stdout.is_empty(), "{args:?}");
+        }
+    }
+
+    #[test]
     fn color_flag_works_after_subcommand() {
         let o = run(&["wans", "list", "--color", "always"]);
         assert!(stdout(&o).contains("\x1b[31mdisconnected"));
@@ -269,6 +339,9 @@ mod with_fixtures {
             serde_json::from_slice::<serde_json::Value>(&o.stdout).unwrap(),
             serde_json::json!({"items": []})
         );
+        let o = run_in(dir.path(), &["-o", "ids", "devices", "list"]);
+        assert!(o.status.success());
+        assert!(o.stdout.is_empty());
         let o = run_in(dir.path(), &["topology"]);
         assert_eq!(o.status.code(), Some(1));
         assert_eq!(
@@ -276,6 +349,23 @@ mod with_fixtures {
             "Error: no gateway node found in topology\n"
         );
     }
+}
+
+#[test]
+fn ids_with_config_check_fails_before_checking() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_unifictl"))
+        .args(["-o", "ids", "config", "check"])
+        .env_clear()
+        .env("HOME", dir.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        "Error: -o ids is only supported by devices, clients, vlans, ssids and wans list\n"
+    );
+    assert!(out.stdout.is_empty(), "no check report");
 }
 
 #[test]

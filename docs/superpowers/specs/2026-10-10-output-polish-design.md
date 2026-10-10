@@ -96,7 +96,7 @@ pub trait Ids { fn ids(&self) -> Vec<&str>; }
 
 Every other command that renders output (`ports list`, which has no per-port
 ID; every `get`; `topology`; `config check`) returns
-`Error: -o ids is only supported by list commands` with exit code 1. `version`
+`Error: -o ids is only supported by devices, clients, vlans, ssids and wans list` with exit code 1. `version`
 and `completions` ignore `--output`, as today.
 
 ## Testing
