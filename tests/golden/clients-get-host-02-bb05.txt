@@ -1,5 +1,5 @@
 FIELD       VALUE
-ID          host-02-aa
+ID          host-02-bb05
 NAME        host-02
 MAC         aa:bb:cc:aa:bb:05
 IP          192.168.10.42

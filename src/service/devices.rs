@@ -578,7 +578,7 @@ mod tests {
         assert_eq!(
             port(&ports, 3).connected_to,
             Some(ConnectionRef::Client(ClientRef::new(
-                "nas-1-68".into(),
+                "nas-1-0002".into(),
                 "nas-1".into()
             )))
         );
@@ -663,7 +663,7 @@ mod tests {
             .iter()
             .find(|c| c.client.name == "MacBook Pro")
             .unwrap();
-        assert_eq!(mb.client.id, "macbook-pro-3c");
+        assert_eq!(mb.client.id, "macbook-pro-0001");
         assert_eq!(mb.ssid, "homelab");
         assert_eq!(mb.signal_strength, -69);
         let uplink = ap.base.uplink.unwrap();

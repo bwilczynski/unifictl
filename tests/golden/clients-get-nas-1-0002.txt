@@ -1,5 +1,5 @@
 FIELD       VALUE
-ID          nas-1-68
+ID          nas-1-0002
 NAME        nas-1
 MAC         68:ee:ee:00:00:02
 IP          192.168.100.5

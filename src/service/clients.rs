@@ -193,15 +193,15 @@ mod tests {
                 .find(|c| c.id == id)
                 .unwrap_or_else(|| panic!("{id}"))
         };
-        let mb = by_id("macbook-pro-3c");
+        let mb = by_id("macbook-pro-0001");
         assert_eq!(mb.name, "MacBook Pro");
         assert_eq!(mb.connection_type, ConnectionType::Wireless);
         assert_eq!(mb.ip.as_deref(), Some("192.168.10.67"));
-        assert_eq!(by_id("nas-1-68").connection_type, ConnectionType::Wired);
-        let kindle = by_id("kindle-paperwhite-e0");
+        assert_eq!(by_id("nas-1-0002").connection_type, ConnectionType::Wired);
+        let kindle = by_id("kindle-paperwhite-bb04");
         assert_eq!(kindle.status, ClientStatus::Offline);
         assert_eq!(kindle.ip.as_deref(), Some("192.168.10.37"));
-        assert_eq!(by_id("host-02-aa").connection_type, ConnectionType::Wired);
+        assert_eq!(by_id("host-02-bb05").connection_type, ConnectionType::Wired);
     }
 
     #[test]
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn get_wireless() {
         let NetworkClientDetail::Wireless(c) =
-            svc(fixtures()).get_client("macbook-pro-3c").unwrap()
+            svc(fixtures()).get_client("macbook-pro-0001").unwrap()
         else {
             panic!("expected wireless")
         };
@@ -231,7 +231,8 @@ mod tests {
 
     #[test]
     fn get_wired() {
-        let NetworkClientDetail::Wired(c) = svc(fixtures()).get_client("nas-1-68").unwrap() else {
+        let NetworkClientDetail::Wired(c) = svc(fixtures()).get_client("nas-1-0002").unwrap()
+        else {
             panic!("expected wired")
         };
         assert_eq!(c.connected_to.device.id, "us-8-60w");
@@ -246,7 +247,7 @@ mod tests {
             clients: vec![],
             ..fixtures()
         };
-        let NetworkClientDetail::Wired(c) = svc(api).get_client("host-02-aa").unwrap() else {
+        let NetworkClientDetail::Wired(c) = svc(api).get_client("host-02-bb05").unwrap() else {
             panic!("expected wired")
         };
         assert_eq!(c.status, ClientStatus::Offline);
@@ -265,7 +266,8 @@ mod tests {
             clients: vec![],
             ..fixtures()
         };
-        let NetworkClientDetail::Wireless(c) = svc(api).get_client("kindle-paperwhite-e0").unwrap()
+        let NetworkClientDetail::Wireless(c) =
+            svc(api).get_client("kindle-paperwhite-bb04").unwrap()
         else {
             panic!("expected wireless")
         };
@@ -290,7 +292,7 @@ mod tests {
             devices: vec![],
             ..fixtures()
         };
-        let detail = svc(api).get_client("nas-1-68").unwrap();
+        let detail = svc(api).get_client("nas-1-0002").unwrap();
         let v = serde_json::to_value(&detail).unwrap();
         assert_eq!(
             v["connectedTo"]["device"],

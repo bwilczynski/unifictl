@@ -560,10 +560,10 @@ mod tests {
             serde_json::to_value(&r).unwrap(),
             json!({"kind": "device", "id": "us-8", "name": "US 8"})
         );
-        let c = ConnectionRef::Client(ClientRef::new("nas-1-68".into(), "nas-1".into()));
+        let c = ConnectionRef::Client(ClientRef::new("nas-1-0002".into(), "nas-1".into()));
         assert_eq!(
             serde_json::to_value(&c).unwrap(),
-            json!({"kind": "client", "id": "nas-1-68", "name": "nas-1"})
+            json!({"kind": "client", "id": "nas-1-0002", "name": "nas-1"})
         );
     }
 
