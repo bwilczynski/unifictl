@@ -526,6 +526,31 @@ pub struct SsidDetail {
     pub security_protocol: SecurityProtocol,
 }
 
+// ---------- -o ids ----------
+
+/// List types whose items have an ID, for `-o ids`.
+pub trait Ids {
+    fn ids(&self) -> Vec<&str>;
+}
+
+macro_rules! impl_ids {
+    ($($list:ty),+ $(,)?) => {
+        $(impl Ids for $list {
+            fn ids(&self) -> Vec<&str> {
+                self.items.iter().map(|i| i.id.as_str()).collect()
+            }
+        })+
+    };
+}
+
+impl_ids!(
+    NetworkDeviceList,
+    NetworkClientList,
+    VlanList,
+    SsidList,
+    WanList
+);
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

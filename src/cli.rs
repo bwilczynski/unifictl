@@ -41,6 +41,8 @@ pub struct Cli {
 pub enum OutputFormat {
     Table,
     Json,
+    /// One ID per line (devices, clients, vlans, ssids and wans list)
+    Ids,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

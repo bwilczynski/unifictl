@@ -93,8 +93,9 @@ unifictl ports list [--device ID] [--mode trunk|access] [--state up|down|disable
 unifictl vlans|ssids|wans list | get <id>
 ```
 
-Every command takes `-o json` and `--refresh`. IDs are kebab-case names (`us-8-60w`); clients
-add the last two MAC bytes (`nas-1-0002`).
+Every command takes `-o json` and `--refresh`. `devices`, `clients`, `vlans`, `ssids` and `wans list`
+also take `-o ids`, printing one ID per line for scripts (`unifictl clients list --status offline -o ids | xargs -n1 unifictl clients get`).
+IDs are kebab-case names (`us-8-60w`); clients add the last two MAC bytes (`nas-1-0002`).
 
 On a terminal, status cells are coloured (green healthy, red disconnected, dim
 offline/down, yellow disabled) in your terminal's own palette. `--color
