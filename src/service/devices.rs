@@ -8,6 +8,7 @@ use super::Service;
 use super::common::*;
 use crate::error::{Error, Result};
 use crate::model::*;
+use crate::unifi::fetch;
 use crate::unifi::types::{Device, NetworkConf, PortEntry, Sta};
 
 /// `(switch MAC, port index)`.
@@ -71,9 +72,11 @@ impl Service {
     }
 
     pub fn get_device(&self, id: &str) -> Result<NetworkDeviceDetail> {
-        let devices = self.api.devices()?;
-        let clients = self.api.clients()?;
-        let confs = self.api.network_conf()?;
+        fetch!(
+            devices = self.api.devices(),
+            clients = self.api.clients(),
+            confs = self.api.network_conf(),
+        );
         let idx = PortIndex::new(&devices, &clients);
         let d = devices
             .iter()

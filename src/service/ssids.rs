@@ -6,14 +6,17 @@ use super::Service;
 use super::common::*;
 use crate::error::{Error, Result};
 use crate::model::*;
+use crate::unifi::fetch;
 use crate::unifi::types::{NetworkConf, Sta, WlanConf};
 
 impl Service {
     /// Enabled SSIDs only.
     pub fn list_ssids(&self) -> Result<SsidList> {
-        let wlans = self.api.wlan_conf()?;
-        let networks = self.api.network_conf()?;
-        let clients = self.api.clients()?;
+        fetch!(
+            wlans = self.api.wlan_conf(),
+            networks = self.api.network_conf(),
+            clients = self.api.clients(),
+        );
         let by_ssid = clients_by_ssid(&clients);
         let items = wlans
             .iter()
@@ -31,10 +34,12 @@ impl Service {
 
     /// Any SSID, enabled or not (matches Go).
     pub fn get_ssid(&self, id: &str) -> Result<SsidDetail> {
-        let wlans = self.api.wlan_conf()?;
-        let networks = self.api.network_conf()?;
-        let clients = self.api.clients()?;
-        let devices = self.api.devices()?;
+        fetch!(
+            wlans = self.api.wlan_conf(),
+            networks = self.api.network_conf(),
+            clients = self.api.clients(),
+            devices = self.api.devices(),
+        );
         let w = wlans
             .iter()
             .find(|w| to_kebab(&w.name) == id)

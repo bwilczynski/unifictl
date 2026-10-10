@@ -6,6 +6,7 @@ use super::Service;
 use super::common::*;
 use crate::error::{Error, Result};
 use crate::model::*;
+use crate::unifi::fetch;
 use crate::unifi::types::{ClientV2, Device, Sta};
 
 impl Service {
@@ -22,15 +23,18 @@ impl Service {
     }
 
     /// Looks up active (v1 sta) clients first, then offline v2 history.
+    /// History is fetched up front, in parallel, rather than only on a miss.
     pub fn get_client(&self, id: &str) -> Result<NetworkClientDetail> {
-        let devices = self.api.devices()?;
+        fetch!(
+            devices = self.api.devices(),
+            stas = self.api.clients(),
+            offline = self.api.offline_clients(self.history_days),
+        );
         let by_mac = mac_to_device(&devices);
 
-        let stas = self.api.clients()?;
         if let Some(sta) = stas.iter().find(|s| client_suffix(s) == id) {
             return Ok(client_to_detail(sta, &by_mac));
         }
-        let offline = self.api.offline_clients(self.history_days)?;
         if let Some(c) = offline.iter().find(|c| client_id_v2(c) == id) {
             return Ok(client_to_detail_v2(c, &by_mac));
         }

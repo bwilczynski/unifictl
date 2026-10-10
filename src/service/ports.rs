@@ -5,6 +5,7 @@ use super::common::*;
 use super::devices::{PortIndex, build_device_ports, build_gateway_ports};
 use crate::error::Result;
 use crate::model::*;
+use crate::unifi::fetch;
 
 /// Query filters for `ports list`; `None` means "do not filter".
 #[derive(Debug, Clone, Default)]
@@ -60,9 +61,11 @@ fn carries_vlan(cfg: Option<&VlanConfig>, vlan_id: i64) -> bool {
 impl Service {
     /// Every switch port plus gateway LAN ports, in controller order.
     pub fn list_ports(&self, filter: &PortFilter) -> Result<NetworkPortList> {
-        let devices = self.api.devices()?;
-        let clients = self.api.clients()?;
-        let confs = self.api.network_conf()?;
+        fetch!(
+            devices = self.api.devices(),
+            clients = self.api.clients(),
+            confs = self.api.network_conf(),
+        );
         let idx = PortIndex::new(&devices, &clients);
 
         let mut items = Vec::new();

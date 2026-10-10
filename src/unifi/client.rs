@@ -1,7 +1,7 @@
 //! HTTP access to a UniFi controller, ported from
 //! homelab-api/internal/adapters/unifi.go.
 
-use std::cell::Cell;
+use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
 use reqwest::StatusCode;
@@ -21,8 +21,9 @@ pub struct UnifiClient {
     auth: Auth,
     site: String,
     http: Client,
-    /// Session mode only: whether the cookie jar holds a live session.
-    logged_in: Cell<bool>,
+    /// Session mode only: whether the cookie jar holds a live session. Locked
+    /// for the duration of a login, so parallel reads share one login.
+    logged_in: Mutex<bool>,
 }
 
 impl UnifiClient {
@@ -54,7 +55,7 @@ impl UnifiClient {
             auth,
             site,
             http,
-            logged_in: Cell::new(false),
+            logged_in: Mutex::new(false),
         })
     }
 
@@ -65,6 +66,20 @@ impl UnifiClient {
             Auth::ApiKey(_) => "/proxy/network",
             Auth::Session { .. } => "",
         }
+    }
+
+    /// Logs in unless a session is live, or always with `force` (after a 401).
+    fn ensure_login(&self, force: bool) -> Result<()> {
+        let mut live = self
+            .logged_in
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if force || !*live {
+            *live = false;
+            self.login()?;
+            *live = true;
+        }
+        Ok(())
     }
 
     fn login(&self) -> Result<()> {
@@ -83,7 +98,6 @@ impl UnifiClient {
                 resp.status().as_u16()
             )));
         }
-        self.logged_in.set(true);
         Ok(())
     }
 
@@ -99,8 +113,8 @@ impl UnifiClient {
     /// GET `{prefix}{path}`; in session mode re-authenticates once on 401.
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         let session = matches!(self.auth, Auth::Session { .. });
-        if session && !self.logged_in.get() {
-            self.login()?;
+        if session {
+            self.ensure_login(false)?;
         }
         let url = format!("{}{}{}", self.base_url, self.prefix(), path);
         let mut resp = self.send(&url)?;
@@ -108,8 +122,7 @@ impl UnifiClient {
             if !session {
                 return Err(Error::Unifi("unifi request: invalid API key (401)".into()));
             }
-            self.logged_in.set(false);
-            self.login()
+            self.ensure_login(true)
                 .map_err(|e| Error::Unifi(format!("unifi re-auth: {e}")))?;
             resp = self.send(&url)?;
             if resp.status() == StatusCode::UNAUTHORIZED {
@@ -333,6 +346,47 @@ mod tests {
         c.network_conf().unwrap();
         login.assert_calls(1);
         conf.assert_calls(2);
+    }
+
+    #[test]
+    fn parallel_session_reads_share_one_login() {
+        let server = MockServer::start();
+        let login = server.mock(|when, then| {
+            when.method(POST).path("/api/login");
+            then.status(200)
+                .header("Set-Cookie", "unifises=abc; Path=/")
+                .json_body(json!({}));
+        });
+        server.mock(|when, then| {
+            when.method(GET).header("cookie", "unifises=abc");
+            then.status(200).json_body(json!({"data": []}));
+        });
+        let c = session_client(&server);
+        std::thread::scope(|s| {
+            let reads: Vec<_> = (0..4).map(|_| s.spawn(|| c.devices())).collect();
+            for r in reads {
+                r.join().unwrap().unwrap();
+            }
+        });
+        login.assert_calls(1);
+    }
+
+    #[test]
+    fn service_reads_endpoints_in_parallel() {
+        let delay = Duration::from_millis(400);
+        let server = MockServer::start();
+        for endpoint in ["stat/device", "stat/sta", "rest/networkconf"] {
+            server.mock(|when, then| {
+                when.method(GET)
+                    .path(format!("/proxy/network/api/s/default/{endpoint}"));
+                then.status(200).delay(delay).json_body(json!({"data": []}));
+            });
+        }
+        let svc = crate::service::Service::new(Box::new(api_key_client(&server)), 30);
+        let start = std::time::Instant::now();
+        svc.list_ports(&Default::default()).unwrap();
+        let elapsed = start.elapsed();
+        assert!(elapsed < delay * 2, "three reads took {elapsed:?}");
     }
 
     #[test]
