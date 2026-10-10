@@ -40,8 +40,27 @@ cargo install --path .
 
 ## Configure
 
-`~/.config/unifictl/config.toml` (or `$XDG_CONFIG_HOME/unifictl/config.toml`,
-or `--config PATH`, or `UNIFICTL_CONFIG`):
+Run the guided setup; it asks for the controller address, an API key (or
+username and password) and the site, writes the config file readable only by
+you, and checks that everything works:
+
+```
+unifictl config init
+```
+
+For scripts, pass everything as flags (`--host`, `--api-key` or
+`--username`/`--password`, `--site`, `--insecure-tls`); secrets can come from
+`UNIFI_API_KEY` / `UNIFI_PASSWORD` instead, which keeps them out of shell
+history. `--force` overwrites an existing file; `--no-check` skips contacting
+the controller.
+
+When something stops working, `unifictl config check` walks through the
+config, file permissions, DNS, TCP, TLS, authentication and site, and says
+which step fails and what to change. It exits non-zero on failure.
+
+The file lives at `~/.config/unifictl/config.toml` (or
+`$XDG_CONFIG_HOME/unifictl/config.toml`, or `--config PATH`, or
+`UNIFICTL_CONFIG`). Every key:
 
 ```toml
 host = "192.168.1.1"      # host[:port]; always https
@@ -54,7 +73,7 @@ api_key = "…"             # UniFi OS (UCG, UDM, …): Settings → Control Pla
 # cache_ttl = 15          # seconds to reuse controller responses; 0 disables
 ```
 
-`chmod 600` the file. Every key can be overridden by an environment variable:
+Every key can be overridden by an environment variable:
 `UNIFI_HOST`, `UNIFI_API_KEY`, `UNIFI_USERNAME`, `UNIFI_PASSWORD`,
 `UNIFI_SITE`, `UNIFI_INSECURE_TLS`, `UNIFI_CLIENT_HISTORY_DAYS`,
 `UNIFI_CACHE_TTL`.

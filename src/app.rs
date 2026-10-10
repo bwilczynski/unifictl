@@ -103,10 +103,10 @@ fn run_config(
     env: &dyn Fn(&str) -> Option<String>,
 ) -> Result<Outcome> {
     let (path, explicit) = config_location(cli.config.as_deref(), env);
-    match cmd {
-        ConfigCommand::Check => {}
-        ConfigCommand::Init(_) => {
-            return Err(Error::Other("config init: not implemented yet".into()));
+    if let ConfigCommand::Init(args) = cmd {
+        setup::init::run(args, &path, env, &mut setup::prompt::TerminalPrompter)?;
+        if args.no_check {
+            return Ok(Outcome::ok(String::new()));
         }
     }
     let report = setup::check::run(&path, explicit, env);
