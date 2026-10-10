@@ -1,0 +1,5 @@
+ID              NAME      VLAN ID  SUBNET
+lan-mgmt  LAN-MGMT  1        192.168.1.0/24
+lan-iot   LAN-IOT   20       192.168.20.0/24
+lan-int   LAN-INT   10       192.168.10.0/24
+lan-srv   LAN-SRV   100      192.168.100.0/24

@@ -1,0 +1,60 @@
+devices-list	devices list
+devices-get-us-8	devices get us-8
+devices-get-us-8-all-ports	devices get us-8 --all-ports
+devices-get-uap-02	devices get uap-02
+devices-get-uap-02-all-ports	devices get uap-02 --all-ports
+devices-get-switch-flex-mini	devices get switch-flex-mini
+devices-get-switch-flex-mini-all-ports	devices get switch-flex-mini --all-ports
+devices-get-uap-01	devices get uap-01
+devices-get-uap-01-all-ports	devices get uap-01 --all-ports
+devices-get-usw-flex-2-5g-8	devices get usw-flex-2-5g-8
+devices-get-usw-flex-2-5g-8-all-ports	devices get usw-flex-2-5g-8 --all-ports
+devices-get-us-8-60w	devices get us-8-60w
+devices-get-us-8-60w-all-ports	devices get us-8-60w --all-ports
+devices-get-cgf-01	devices get cgf-01
+devices-get-cgf-01-all-ports	devices get cgf-01 --all-ports
+devices-get-missing	devices get missing
+clients-list	clients list
+clients-list-online	clients list --status online
+clients-list-offline	clients list --status offline
+clients-get-ec-ee-ee-00-00-04-ec	clients get ec-ee-ee-00-00-04-ec
+clients-get-host-02-aa	clients get host-02-aa
+clients-get-iphone-a4	clients get iphone-a4
+clients-get-kindle-paperwhite-e0	clients get kindle-paperwhite-e0
+clients-get-macbook-pro-3c	clients get macbook-pro-3c
+clients-get-nas-1-68	clients get nas-1-68
+clients-get-nintendo-switch-11	clients get nintendo-switch-11
+clients-get-sonos-one-sl-l-c4	clients get sonos-one-sl-l-c4
+topology	topology
+topology-clients	topology --include-clients
+topology-wireless	topology --include-wireless
+ports-list	ports list
+ports-list-wide	ports list --wide
+ports-list-all	ports list --all-ports
+ports-list-all-wide	ports list --all-ports --wide
+ports-state-down	ports list --state down
+ports-mode-trunk	ports list --mode trunk --all-ports
+ports-mode-access	ports list --mode access --all-ports
+ports-vlan-1	ports list --vlan 1 --all-ports
+ports-vlan-10	ports list --vlan 10 --all-ports
+ports-vlan-20	ports list --vlan 20 --all-ports
+ports-vlan-100	ports list --vlan 100 --all-ports
+ports-device-us-8	ports list --device us-8 --all-ports
+ports-device-switch-flex-mini	ports list --device switch-flex-mini --all-ports
+ports-device-usw-flex-2-5g-8	ports list --device usw-flex-2-5g-8 --all-ports
+ports-device-us-8-60w	ports list --device us-8-60w --all-ports
+ports-device-cgf-01	ports list --device cgf-01 --all-ports
+vlans-list	vlans list
+vlans-get-lan-mgmt	vlans get lan-mgmt
+vlans-get-lan-iot	vlans get lan-iot
+vlans-get-lan-int	vlans get lan-int
+vlans-get-lan-srv	vlans get lan-srv
+vlans-get-missing	vlans get missing
+ssids-list	ssids list
+ssids-get-home-wifi-iot	ssids get home-wifi-iot
+ssids-get-home-wifi	ssids get home-wifi
+ssids-get-missing	ssids get missing
+wans-list	wans list
+wans-get-internet-1	wans get internet-1
+wans-get-internet-2	wans get internet-2
+wans-get-missing	wans get missing

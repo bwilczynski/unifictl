@@ -1,0 +1,11 @@
+FIELD       VALUE
+ID          macbook-pro-3c
+NAME        MacBook Pro
+MAC         3c:ee:ee:00:00:01
+IP          192.168.10.67
+CONNECTION  wireless
+STATUS      online
+AP          UAP-01
+SSID        homelab
+SIGNAL      -69 dBm
+UPTIME      7h 31m 15s

@@ -1,0 +1,15 @@
+FIELD     VALUE
+ID        home-wifi
+NAME      home-wifi
+VLAN ID   10
+BANDS     2.4 GHz, 5 GHz
+CLIENTS   0
+SECURITY  wpa2
+
+--- CLIENTS ---
+NAME
+
+--- BROADCASTING APs ---
+NAME
+UAP-01
+UAP-02

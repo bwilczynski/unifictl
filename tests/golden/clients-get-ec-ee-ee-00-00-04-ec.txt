@@ -1,0 +1,11 @@
+FIELD       VALUE
+ID          ec-ee-ee-00-00-04-ec
+NAME        ec:ee:ee:00:00:04
+MAC         ec:ee:ee:00:00:04
+IP          192.168.10.13
+CONNECTION  wired
+STATUS      online
+SWITCH      UAP-01
+PORT        6
+LINK SPEED  100 Mbps
+UPTIME      11d 10h 32m 56s

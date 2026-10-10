@@ -1,0 +1,33 @@
+FIELD       VALUE
+ID          us-8-60w
+NAME        US 8 60W
+MAC         aa:bb:cc:dd:06:01
+IP          192.168.1.21
+TYPE        switch
+STATUS      connected
+MODEL       US8P60
+FIRMWARE    7.4.1.16850
+UPTIME      1h 33m 30s
+TRAFFIC RX  22.0 KB/s (41.8 MB total)
+TRAFFIC TX  15.1 KB/s (58.0 MB total)
+UPLINK      CGF-01 (port 1, 1 GbE)
+
+--- PORTS ---
+PORT  LABEL       STATE  SPEED     UPTIME    SFP  LAG         POE   POE WATTS  RX          TX         CONNECTED TO
+1     -           up     1 GbE     1h 0m 0s  -    -           -     -          105.2 KB/s  65.6 KB/s  CGF-01
+5     -           up     100 Mbps  -         -    -           auto  2.9 W      12.7 KB/s   60.8 KB/s  UAP-01
+6     -           up     1 GbE     -         -    -           auto  1.4 W      200 B/s     1.6 KB/s   Switch Flex Mini
+7     -           up     1 GbE     -         -    -           auto  4.7 W      52.4 KB/s   54.2 KB/s  US 8
+8     -           up     1 GbE     -         -    -           auto  2.9 W      6.6 KB/s    3.6 KB/s   UAP-02
+11    LAG Master  up     1 GbE     2h 0m 0s  -    master #11  -     -          30 B/s      50 B/s     -
+12    -           up     1 GbE     -         -    member #11  -     -          30 B/s      50 B/s     -
+
+--- VLAN CONFIG ---
+PORT  MODE   NATIVE VLAN   TAGGED VLANS
+1     trunk  LAN-MGMT (1)  all
+5     trunk  LAN-MGMT (1)  all
+6     trunk  LAN-MGMT (1)  LAN-INT (10)
+7     trunk  LAN-MGMT (1)  all
+8     trunk  LAN-MGMT (1)  all
+11    trunk  LAN-MGMT (1)  all
+12    trunk  LAN-MGMT (1)  all

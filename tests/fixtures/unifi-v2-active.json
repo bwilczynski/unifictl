@@ -1,0 +1,55 @@
+{
+  "data": [
+    {
+      "id": "aabbcc000001",
+      "mac": "3c:22:fb:aa:bb:01",
+      "display_name": "MacBook Pro",
+      "name": "MacBook Pro",
+      "hostname": "macbook",
+      "ip": "192.168.10.67",
+      "last_ip": "",
+      "is_wired": false,
+      "status": "online",
+      "last_uplink_name": "UAP-01",
+      "last_uplink_mac": "aa:bb:cc:dd:04:01",
+      "uptime": 27075,
+      "essid": "homelab",
+      "signal": -69,
+      "last_seen": 0
+    },
+    {
+      "id": "aabbcc000002",
+      "mac": "68:d7:9a:aa:bb:02",
+      "display_name": "nas-1",
+      "name": null,
+      "hostname": "nas-1",
+      "ip": "192.168.100.5",
+      "last_ip": "",
+      "is_wired": true,
+      "status": "online",
+      "last_uplink_name": "Switch Living Room",
+      "last_uplink_mac": "aa:bb:cc:dd:06:01",
+      "uptime": 1024199,
+      "essid": null,
+      "signal": null,
+      "last_seen": 0
+    },
+    {
+      "id": "aabbcc000003",
+      "mac": "c4:38:75:aa:bb:03",
+      "display_name": "Sonos One SL (L)",
+      "name": "Sonos One SL (L)",
+      "hostname": "SonosZP",
+      "ip": "192.168.10.55",
+      "last_ip": "",
+      "is_wired": false,
+      "status": "online",
+      "last_uplink_name": "UAP-01",
+      "last_uplink_mac": "aa:bb:cc:dd:04:01",
+      "uptime": 86400,
+      "essid": "homelab-iot",
+      "signal": -58,
+      "last_seen": 0
+    }
+  ]
+}

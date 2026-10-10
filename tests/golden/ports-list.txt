@@ -1,0 +1,18 @@
+DEVICE            PORT  LABEL       STATE  MODE    NATIVE VLAN    TAGGED VLANS  CONNECTED TO
+CGF-01            1     -           up     trunk   LAN-MGMT (1)   all           US 8 60W
+CGF-01            2     -           up     trunk   LAN-MGMT (1)   all           USW Flex 2.5G 8
+Switch Flex Mini  1     -           up     trunk   LAN-MGMT (1)   all           US 8 60W
+Switch Flex Mini  5     -           up     access  LAN-INT (10)   -             -
+US 8              1     -           up     trunk   LAN-MGMT (1)   all           US 8 60W
+US 8              3     -           up     access  LAN-SRV (100)  -             -
+US 8              4     -           up     access  LAN-SRV (100)  -             -
+US 8              6     -           up     access  LAN-INT (10)   -             -
+US 8 60W          1     -           up     trunk   LAN-MGMT (1)   all           CGF-01
+US 8 60W          5     -           up     trunk   LAN-MGMT (1)   all           UAP-01
+US 8 60W          6     -           up     trunk   LAN-MGMT (1)   LAN-INT (10)  Switch Flex Mini
+US 8 60W          7     -           up     trunk   LAN-MGMT (1)   all           US 8
+US 8 60W          8     -           up     trunk   LAN-MGMT (1)   all           UAP-02
+US 8 60W          11    LAG Master  up     trunk   LAN-MGMT (1)   all           -
+US 8 60W          12    -           up     trunk   LAN-MGMT (1)   all           -
+USW Flex 2.5G 8   8     -           up     trunk   LAN-MGMT (1)   all           -
+USW Flex 2.5G 8   9     -           up     trunk   LAN-MGMT (1)   all           CGF-01

@@ -1,0 +1,29 @@
+FIELD       VALUE
+ID          switch-flex-mini
+NAME        Switch Flex Mini
+MAC         aa:bb:cc:dd:03:01
+IP          192.168.1.12
+TYPE        switch
+STATUS      connected
+MODEL       USMINI
+FIRMWARE    2.1.6.762
+UPTIME      1h 8m 43s
+TRAFFIC RX  0 B/s (0 B total)
+TRAFFIC TX  0 B/s (768 B total)
+UPLINK      US 8 60W (port 6, 1 GbE)
+
+--- PORTS ---
+PORT  LABEL  STATE  SPEED  UPTIME  SFP  LAG  POE  POE WATTS  RX        TX       CONNECTED TO
+1     -      up     1 GbE  -       -    -    -    -          1.7 KB/s  221 B/s  US 8 60W
+2     -      down   -      -       -    -    -    -          0 B/s     0 B/s    -
+3     -      down   -      -       -    -    -    -          0 B/s     0 B/s    -
+4     -      down   -      -       -    -    -    -          0 B/s     0 B/s    -
+5     -      up     1 GbE  -       -    -    -    -          89 B/s    926 B/s  -
+
+--- VLAN CONFIG ---
+PORT  MODE    NATIVE VLAN   TAGGED VLANS
+1     trunk   LAN-MGMT (1)  all
+2     access  LAN-INT (10)  -
+3     access  LAN-INT (10)  -
+4     access  LAN-INT (10)  -
+5     access  LAN-INT (10)  -

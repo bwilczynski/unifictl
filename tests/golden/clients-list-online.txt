@@ -1,0 +1,4 @@
+ID                       NAME              MAC                IP             STATUS  CONNECTION
+macbook-pro-3c     MacBook Pro       3c:22:fb:aa:bb:01  192.168.10.67  online  wireless
+nas-1-68           nas-1             68:d7:9a:aa:bb:02  192.168.100.5  online  wired
+sonos-one-sl-l-c4  Sonos One SL (L)  c4:38:75:aa:bb:03  192.168.10.55  online  wireless

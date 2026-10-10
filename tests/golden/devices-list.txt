@@ -1,0 +1,8 @@
+ID                      NAME              MAC                IP            TYPE         STATUS
+us-8              US 8              aa:bb:cc:dd:01:01  192.168.1.44  switch       connected
+uap-02            UAP-02            aa:bb:cc:dd:02:01  192.168.1.10  accessPoint  connected
+switch-flex-mini  Switch Flex Mini  aa:bb:cc:dd:03:01  192.168.1.12  switch       connected
+uap-01            UAP-01            aa:bb:cc:dd:04:01  192.168.1.22  accessPoint  connected
+usw-flex-2-5g-8   USW Flex 2.5G 8   aa:bb:cc:dd:05:01  192.168.1.40  switch       connected
+us-8-60w          US 8 60W          aa:bb:cc:dd:06:01  192.168.1.21  switch       connected
+cgf-01            CGF-01            aa:bb:cc:dd:07:01  192.168.1.10  gateway      connected

@@ -1,0 +1,39 @@
+FIELD       VALUE
+ID          usw-flex-2-5g-8
+NAME        USW Flex 2.5G 8
+MAC         aa:bb:cc:dd:05:01
+IP          192.168.1.40
+TYPE        switch
+STATUS      connected
+MODEL       USWED36
+FIRMWARE    2.1.8.971
+UPTIME      1h 33m 48s
+TRAFFIC RX  0 B/s (4.5 MB total)
+TRAFFIC TX  0 B/s (6.7 MB total)
+UPLINK      CGF-01 (port 2, 2.5 GbE)
+
+--- PORTS ---
+PORT  LABEL  STATE  SPEED    UPTIME    SFP  LAG  POE  POE WATTS  RX        TX        CONNECTED TO
+1     -      down   -        -         -    -    -    -          0 B/s     0 B/s     -
+2     -      down   -        -         -    -    -    -          0 B/s     0 B/s     -
+3     -      down   -        -         -    -    -    -          0 B/s     0 B/s     -
+4     -      down   -        -         -    -    -    -          0 B/s     0 B/s     -
+5     -      down   -        -         -    -    -    -          0 B/s     0 B/s     -
+6     -      down   -        -         -    -    -    -          0 B/s     0 B/s     -
+7     -      down   -        -         -    -    -    -          0 B/s     0 B/s     -
+8     -      up     10 Mbps  20m 25s   -    -    -    -          0 B/s     3.3 KB/s  -
+9     -      up     2.5 GbE  1h 3m 1s  -    -    -    -          3.4 KB/s  72 B/s    CGF-01
+10    -      down   -        -         no   -    -    -          3.4 KB/s  72 B/s    -
+
+--- VLAN CONFIG ---
+PORT  MODE   NATIVE VLAN   TAGGED VLANS
+1     trunk  LAN-MGMT (1)  all
+2     trunk  LAN-MGMT (1)  all
+3     trunk  LAN-MGMT (1)  all
+4     trunk  LAN-MGMT (1)  all
+5     trunk  LAN-MGMT (1)  all
+6     trunk  LAN-MGMT (1)  all
+7     trunk  LAN-MGMT (1)  all
+8     trunk  LAN-MGMT (1)  all
+9     trunk  LAN-MGMT (1)  all
+10    trunk  LAN-MGMT (1)  all

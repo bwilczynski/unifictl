@@ -1,0 +1,1 @@
+{"items":[{"id":"lan-mgmt","name":"LAN-MGMT","subnet":"192.168.1.0/24","vlanId":1},{"id":"lan-iot","name":"LAN-IOT","subnet":"192.168.20.0/24","vlanId":20},{"id":"lan-int","name":"LAN-INT","subnet":"192.168.10.0/24","vlanId":10},{"id":"lan-srv","name":"LAN-SRV","subnet":"192.168.100.0/24","vlanId":100}]}

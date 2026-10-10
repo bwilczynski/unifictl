@@ -1,0 +1,3 @@
+ID                   NAME           VLAN ID  BANDS           CLIENTS
+home-wifi-iot  home-wifi-iot  20       2.4 GHz, 5 GHz  0
+home-wifi      home-wifi      10       2.4 GHz, 5 GHz  0

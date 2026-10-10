@@ -1,0 +1,1 @@
+{"broadcastIp":"192.168.10.255","dhcpMode":"server","dhcpRange":{"end":"192.168.10.254","start":"192.168.10.6"},"dnsServers":["192.168.100.5","192.168.10.1"],"gatewayIp":"192.168.10.1","id":"lan-int","name":"LAN-INT","subnet":"192.168.10.0/24","vlanId":10}

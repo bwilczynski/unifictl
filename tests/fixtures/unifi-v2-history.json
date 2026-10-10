@@ -1,0 +1,38 @@
+{
+  "data": [
+    {
+      "id": "aabbcc000004",
+      "mac": "e0:f7:28:aa:bb:04",
+      "display_name": "Kindle Paperwhite",
+      "name": "Kindle Paperwhite",
+      "hostname": null,
+      "ip": "",
+      "last_ip": "192.168.10.37",
+      "is_wired": false,
+      "status": "offline",
+      "last_uplink_name": "UAP-01",
+      "last_uplink_mac": "aa:bb:cc:dd:04:01",
+      "uptime": 0,
+      "essid": "homelab",
+      "signal": null,
+      "last_seen": 1778837212
+    },
+    {
+      "id": "aabbcc000005",
+      "mac": "aa:bb:cc:aa:bb:05",
+      "display_name": "host-02 aa",
+      "name": null,
+      "hostname": "host-02",
+      "ip": "",
+      "last_ip": "192.168.10.42",
+      "is_wired": true,
+      "status": "offline",
+      "last_uplink_name": "Switch Flex Mini",
+      "last_uplink_mac": "aa:bb:cc:dd:03:01",
+      "uptime": 0,
+      "essid": null,
+      "signal": null,
+      "last_seen": 1778829796
+    }
+  ]
+}

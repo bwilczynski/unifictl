@@ -1,0 +1,33 @@
+FIELD       VALUE
+ID          cgf-01
+NAME        CGF-01
+MAC         aa:bb:cc:dd:07:01
+IP          192.168.1.10
+TYPE        gateway
+STATUS      connected
+MODEL       UDMA6A8
+FIRMWARE    5.1.19.33549
+UPTIME      1h 33m 47s
+TRAFFIC RX  946 B/s (40.2 MB total)
+TRAFFIC TX  1.3 KB/s (35.4 MB total)
+
+--- PORTS ---
+PORT  LABEL   STATE  SPEED    UPTIME  SFP  LAG  POE   POE WATTS  RX     TX     CONNECTED TO
+1     -       up     1 GbE    -       -    -    -     -          0 B/s  0 B/s  US 8 60W
+2     -       up     2.5 GbE  -       -    -    -     -          0 B/s  0 B/s  USW Flex 2.5G 8
+3     -       down   -        -       -    -    -     -          0 B/s  0 B/s  -
+4     -       down   -        -       -    -    auto  0.0 W      0 B/s  0 B/s  -
+6     SFP+ 1  down   -        -       -    -    -     -          0 B/s  0 B/s  -
+
+--- VLAN CONFIG ---
+PORT  MODE   NATIVE VLAN   TAGGED VLANS
+1     trunk  LAN-MGMT (1)  all
+2     trunk  LAN-MGMT (1)  all
+3     trunk  LAN-MGMT (1)  all
+4     trunk  LAN-MGMT (1)  all
+6     trunk  LAN-MGMT (1)  all
+
+--- WANS ---
+ID                NAME
+internet-1  Internet 1
+internet-2  Internet 2
