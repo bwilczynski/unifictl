@@ -10,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde_json::json;
 
 use super::UnifiApi;
-use super::types::{ClientV2, Device, Envelope, NetworkConf, Sta, WlanConf};
+use super::types::{ClientV2, Device, Envelope, NetworkConf, Site, Sta, WlanConf};
 use crate::cache::Cache;
 use crate::config::{Auth, Config};
 use crate::error::{Error, Result};
@@ -27,6 +27,49 @@ pub struct UnifiClient {
     logged_in: Mutex<bool>,
     cache: Option<Cache>,
     timeout: Duration,
+}
+
+/// Why a request never got an HTTP response, for `config check`/`config init`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TransportError {
+    Dns(String),
+    Connect(String),
+    Timeout,
+    /// The controller's certificate was rejected; holds the reason (e.g. `UnknownIssuer`).
+    Certificate(String),
+    Other(String),
+}
+
+impl std::fmt::Display for TransportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Dns(m) => write!(f, "DNS lookup failed: {m}"),
+            Self::Connect(m) => write!(f, "connection failed: {m}"),
+            Self::Timeout => write!(f, "timed out"),
+            Self::Certificate(r) => write!(f, "certificate not trusted: {r}"),
+            Self::Other(m) => write!(f, "{m}"),
+        }
+    }
+}
+
+/// Why listing sites failed: the request, the login, or the response.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccessError {
+    Transport(TransportError),
+    Login(u16),
+    Status(u16),
+    Parse(String),
+}
+
+impl std::fmt::Display for AccessError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Transport(e) => write!(f, "{e}"),
+            Self::Login(code) => write!(f, "login failed (status {code})"),
+            Self::Status(code) => write!(f, "status {code}"),
+            Self::Parse(m) => write!(f, "unexpected response: {m}"),
+        }
+    }
 }
 
 impl UnifiClient {
@@ -75,6 +118,38 @@ impl UnifiClient {
         self
     }
 
+    /// Completes one unauthenticated request to the controller root; any
+    /// HTTP response means DNS, TCP and TLS all worked.
+    pub fn handshake(&self) -> std::result::Result<(), TransportError> {
+        self.http
+            .get(format!("{}/", self.base_url))
+            .timeout(self.timeout)
+            .send()
+            .map(drop)
+            .map_err(|e| classify(&e))
+    }
+
+    /// Lists the controller's sites, logging in first in session mode.
+    /// Uncached, and every failure is typed so callers can explain it.
+    pub fn sites(&self) -> std::result::Result<Vec<Site>, AccessError> {
+        let transport = |e: reqwest::Error| AccessError::Transport(classify(&e));
+        if let Auth::Session { username, password } = &self.auth {
+            let resp = self.post_login(username, password).map_err(transport)?;
+            if resp.status() != StatusCode::OK {
+                return Err(AccessError::Login(resp.status().as_u16()));
+            }
+        }
+        let url = format!("{}{}/api/self/sites", self.base_url, self.prefix());
+        let resp = self.request(&url).map_err(transport)?;
+        if !resp.status().is_success() {
+            return Err(AccessError::Status(resp.status().as_u16()));
+        }
+        let body = resp.text().map_err(transport)?;
+        serde_json::from_str::<Envelope<Vec<Site>>>(&body)
+            .map(|env| env.data)
+            .map_err(|e| AccessError::Parse(e.to_string()))
+    }
+
     /// UniFi OS proxies the Network app at /proxy/network; legacy controllers
     /// expose it at the root.
     fn prefix(&self) -> &'static str {
@@ -98,16 +173,28 @@ impl UnifiClient {
         Ok(())
     }
 
+    fn post_login(&self, username: &str, password: &str) -> reqwest::Result<Response> {
+        self.http
+            .post(format!("{}/api/login", self.base_url))
+            .json(&json!({ "username": username, "password": password }))
+            .timeout(self.timeout)
+            .send()
+    }
+
+    fn request(&self, url: &str) -> reqwest::Result<Response> {
+        let mut req = self.http.get(url).timeout(self.timeout);
+        if let Auth::ApiKey(key) = &self.auth {
+            req = req.header("X-API-KEY", key);
+        }
+        req.send()
+    }
+
     fn login(&self) -> Result<()> {
         let Auth::Session { username, password } = &self.auth else {
             return Ok(());
         };
         let resp = self
-            .http
-            .post(format!("{}/api/login", self.base_url))
-            .json(&json!({ "username": username, "password": password }))
-            .timeout(self.timeout)
-            .send()
+            .post_login(username, password)
             .map_err(|e| Error::Unifi(format!("unifi login: {}", describe(&e))))?;
         if resp.status() != StatusCode::OK {
             return Err(Error::Unifi(format!(
@@ -119,11 +206,7 @@ impl UnifiClient {
     }
 
     fn send(&self, url: &str) -> Result<Response> {
-        let mut req = self.http.get(url).timeout(self.timeout);
-        if let Auth::ApiKey(key) = &self.auth {
-            req = req.header("X-API-KEY", key);
-        }
-        req.send()
+        self.request(url)
             .map_err(|e| Error::Unifi(format!("unifi request: {}", describe(&e))))
     }
 
@@ -220,7 +303,7 @@ impl UnifiApi for UnifiClient {
 
 /// reqwest's Display omits the cause ("error sending request"); append the
 /// source chain so TLS and DNS failures are visible.
-fn describe(e: &reqwest::Error) -> String {
+fn chain(e: &reqwest::Error) -> String {
     let mut msg = e.to_string();
     let mut source = std::error::Error::source(e);
     while let Some(s) = source {
@@ -228,7 +311,33 @@ fn describe(e: &reqwest::Error) -> String {
         msg.push_str(&s.to_string());
         source = s.source();
     }
-    with_tls_hint(msg)
+    msg
+}
+
+fn describe(e: &reqwest::Error) -> String {
+    with_tls_hint(chain(e))
+}
+
+pub fn classify(e: &reqwest::Error) -> TransportError {
+    classify_chain(&chain(e), e.is_timeout(), e.is_connect())
+}
+
+/// Sorts a failed request by the text of its error chain. rustls reports
+/// `invalid peer certificate: <Reason>`; hyper reports `dns error: …`.
+fn classify_chain(chain: &str, timeout: bool, connect: bool) -> TransportError {
+    let lower = chain.to_lowercase();
+    if lower.contains("certificate") {
+        let reason = chain.rsplit(": ").next().unwrap_or(chain);
+        TransportError::Certificate(reason.to_string())
+    } else if timeout {
+        TransportError::Timeout
+    } else if lower.contains("dns error") {
+        TransportError::Dns(chain.to_string())
+    } else if connect {
+        TransportError::Connect(chain.to_string())
+    } else {
+        TransportError::Other(chain.to_string())
+    }
 }
 
 /// UniFi gateways ship self-signed certificates; point users at the fix.
@@ -565,5 +674,143 @@ mod tests {
             with_tls_hint("connection refused".into()),
             "connection refused"
         );
+    }
+
+    fn sites_body() -> serde_json::Value {
+        json!({"meta": {"rc": "ok"}, "data": [
+            {"name": "default", "desc": "Default", "_id": "x"},
+            {"name": "ab12cd", "desc": "Lab"}
+        ]})
+    }
+
+    #[test]
+    fn sites_with_api_key() {
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/api/self/sites")
+                .header("X-API-KEY", "k");
+            then.status(200).json_body(sites_body());
+        });
+        let sites = api_key_client(&server).sites().unwrap();
+        m.assert();
+        assert_eq!(
+            sites,
+            vec![
+                Site {
+                    name: "default".into(),
+                    desc: "Default".into()
+                },
+                Site {
+                    name: "ab12cd".into(),
+                    desc: "Lab".into()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn sites_with_session_logs_in_first() {
+        let server = MockServer::start();
+        let login = server.mock(|when, then| {
+            when.method(POST).path("/api/login");
+            then.status(200)
+                .header("Set-Cookie", "unifises=abc; Path=/")
+                .json_body(json!({}));
+        });
+        server.mock(|when, then| {
+            when.method(GET)
+                .path("/api/self/sites")
+                .header("cookie", "unifises=abc");
+            then.status(200).json_body(sites_body());
+        });
+        assert_eq!(session_client(&server).sites().unwrap().len(), 2);
+        login.assert();
+    }
+
+    #[test]
+    fn sites_errors_are_typed() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(GET).path("/proxy/network/api/self/sites");
+            then.status(401);
+        });
+        assert_eq!(
+            api_key_client(&server).sites(),
+            Err(AccessError::Status(401))
+        );
+
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(POST).path("/api/login");
+            then.status(400);
+        });
+        assert_eq!(
+            session_client(&server).sites(),
+            Err(AccessError::Login(400))
+        );
+
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(GET).path("/proxy/network/api/self/sites");
+            then.status(200).body("<html>");
+        });
+        assert!(matches!(
+            api_key_client(&server).sites(),
+            Err(AccessError::Parse(_))
+        ));
+    }
+
+    #[test]
+    fn handshake_accepts_any_http_response() {
+        let server = MockServer::start();
+        assert_eq!(api_key_client(&server).handshake(), Ok(()));
+        let c = UnifiClient::with_base_url(
+            "http://127.0.0.1:1".into(),
+            Auth::ApiKey("k".into()),
+            "default".into(),
+            false,
+        )
+        .unwrap();
+        assert!(matches!(c.handshake(), Err(TransportError::Connect(_))));
+    }
+
+    #[test]
+    fn classify_chain_kinds() {
+        let pre = "error sending request for url (https://h/): client error (Connect)";
+        assert_eq!(
+            classify_chain(
+                &format!("{pre}: invalid peer certificate: UnknownIssuer"),
+                false,
+                true
+            ),
+            TransportError::Certificate("UnknownIssuer".into())
+        );
+        assert!(matches!(
+            classify_chain(
+                &format!(
+                    "{pre}: dns error: failed to lookup address information: Name or service not known"
+                ),
+                false,
+                true
+            ),
+            TransportError::Dns(_)
+        ));
+        assert!(matches!(
+            classify_chain(
+                &format!("{pre}: tcp connect error: Connection refused (os error 111)"),
+                false,
+                true
+            ),
+            TransportError::Connect(_)
+        ));
+        assert_eq!(
+            classify_chain("operation timed out", true, false),
+            TransportError::Timeout
+        );
+        assert!(matches!(
+            classify_chain("boom", false, false),
+            TransportError::Other(_)
+        ));
     }
 }

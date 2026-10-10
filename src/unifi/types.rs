@@ -22,6 +22,17 @@ pub struct Envelope<T: Default> {
     pub data: T,
 }
 
+/// One entry of `/api/self/sites`: `name` is the short ID used in URLs and
+/// config, `desc` the name shown in the UI.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct Site {
+    #[serde(deserialize_with = "nd")]
+    pub name: String,
+    #[serde(deserialize_with = "nd")]
+    pub desc: String,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct Device {
