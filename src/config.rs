@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
@@ -38,17 +38,26 @@ pub struct Loaded {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+/// The keys of config.toml. `config init` writes only the ones it sets.
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct FileConfig {
-    host: Option<String>,
-    api_key: Option<String>,
-    username: Option<String>,
-    password: Option<String>,
-    site: Option<String>,
-    insecure_tls: Option<bool>,
-    client_history_days: Option<i64>,
-    cache_ttl: Option<u64>,
+pub struct FileConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub site: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub insecure_tls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_history_days: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<u64>,
 }
 
 /// `--config` > `UNIFICTL_CONFIG` > `$XDG_CONFIG_HOME/unifictl/config.toml` >
@@ -76,6 +85,16 @@ pub fn resolve_cache_dir(env: &dyn Fn(&str) -> Option<String>) -> PathBuf {
         .or_else(|| var("HOME").map(|h| PathBuf::from(h).join(".cache")))
         .unwrap_or_else(|| PathBuf::from(".cache"));
     base.join("unifictl")
+}
+
+/// Writes `file` to `path` owner-only, creating its directory.
+pub fn write(path: &Path, file: &FileConfig) -> Result<()> {
+    let body = toml::to_string(file).map_err(|e| Error::Config(format!("encode config: {e}")))?;
+    let fail = |e: std::io::Error| Error::Config(format!("cannot write {}: {e}", path.display()));
+    if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+        crate::private_fs::create_dir(dir).map_err(fail)?;
+    }
+    crate::private_fs::replace(path, &body).map_err(fail)
 }
 
 /// Reads `path` (a missing file is fine unless the user named it explicitly),
@@ -227,7 +246,7 @@ mod tests {
         move |k: &str| m.get(k).cloned()
     }
 
-    fn write(dir: &tempfile::TempDir, body: &str) -> PathBuf {
+    fn write_file(dir: &tempfile::TempDir, body: &str) -> PathBuf {
         let p = dir.path().join("config.toml");
         std::fs::write(&p, body).unwrap();
         #[cfg(unix)]
@@ -266,7 +285,7 @@ mod tests {
     #[test]
     fn file_with_api_key_and_defaults() {
         let dir = tempfile::tempdir().unwrap();
-        let p = write(&dir, "host = \"192.168.1.1\"\napi_key = \"k\"\n");
+        let p = write_file(&dir, "host = \"192.168.1.1\"\napi_key = \"k\"\n");
         let l = load(&p, false, &env_of(&[])).unwrap();
         assert_eq!(
             l.config,
@@ -285,7 +304,7 @@ mod tests {
     #[test]
     fn env_overrides_file() {
         let dir = tempfile::tempdir().unwrap();
-        let p = write(
+        let p = write_file(
             &dir,
             "host = \"a\"\napi_key = \"k\"\nsite = \"s1\"\nclient_history_days = 7\n",
         );
@@ -310,7 +329,7 @@ mod tests {
     #[test]
     fn cache_ttl_from_file_env_and_zero() {
         let dir = tempfile::tempdir().unwrap();
-        let p = write(&dir, "host = \"h\"\napi_key = \"k\"\ncache_ttl = 60\n");
+        let p = write_file(&dir, "host = \"h\"\napi_key = \"k\"\ncache_ttl = 60\n");
         let ttl = |env: &[(&str, &str)]| load(&p, false, &env_of(env)).map(|l| l.config.cache_ttl);
         assert_eq!(ttl(&[]).unwrap(), Duration::from_secs(60));
         assert_eq!(ttl(&[("UNIFI_CACHE_TTL", "0")]).unwrap(), Duration::ZERO);
@@ -428,7 +447,7 @@ mod tests {
     #[test]
     fn unknown_keys_are_rejected() {
         let dir = tempfile::tempdir().unwrap();
-        let p = write(&dir, "host = \"h\"\napikey = \"k\"\n");
+        let p = write_file(&dir, "host = \"h\"\napikey = \"k\"\n");
         assert!(
             load(&p, false, &env_of(&[]))
                 .unwrap_err()
@@ -442,10 +461,67 @@ mod tests {
     fn world_readable_file_warns() {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
-        let p = write(&dir, "host = \"h\"\napi_key = \"k\"\n");
+        let p = write_file(&dir, "host = \"h\"\napi_key = \"k\"\n");
         std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o644)).unwrap();
         let l = load(&p, false, &env_of(&[])).unwrap();
         assert_eq!(l.warnings.len(), 1);
         assert!(l.warnings[0].contains("chmod 600"));
+    }
+
+    #[cfg(unix)]
+    fn mode(p: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(p).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn write_creates_dirs_and_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("xdg/unifictl/config.toml");
+        let file = FileConfig {
+            host: Some("192.168.1.1".into()),
+            api_key: Some("k".into()),
+            site: Some("lab".into()),
+            ..Default::default()
+        };
+        write(&p, &file).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&p).unwrap(),
+            "host = \"192.168.1.1\"\napi_key = \"k\"\nsite = \"lab\"\n"
+        );
+        let l = load(&p, true, &env_of(&[])).unwrap();
+        assert_eq!(l.config.site, "lab");
+        assert!(l.warnings.is_empty(), "{:?}", l.warnings);
+        #[cfg(unix)]
+        {
+            assert_eq!(mode(&p), 0o600);
+            assert_eq!(mode(p.parent().unwrap()), 0o700);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_over_world_readable_file_is_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let p = write_file(&dir, "host = \"old\"\napi_key = \"k\"\n");
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let file = FileConfig {
+            host: Some("new".into()),
+            username: Some("u".into()),
+            password: Some("p".into()),
+            insecure_tls: Some(true),
+            ..Default::default()
+        };
+        write(&p, &file).unwrap();
+        assert_eq!(mode(&p), 0o600);
+        let c = load(&p, true, &env_of(&[])).unwrap().config;
+        assert_eq!(c.host, "new");
+        assert!(c.insecure_tls);
+        assert_eq!(
+            std::fs::read_dir(dir.path()).unwrap().count(),
+            1,
+            "temp file left behind"
+        );
     }
 }
