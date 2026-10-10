@@ -13,6 +13,10 @@ pub struct Cli {
     #[arg(short, long, global = true, value_enum, default_value_t = OutputFormat::Table)]
     pub output: OutputFormat,
 
+    /// Ignore cached controller responses and fetch fresh ones
+    #[arg(long, global = true)]
+    pub refresh: bool,
+
     /// Config file (default: ~/.config/unifictl/config.toml)
     #[arg(long, global = true, value_name = "PATH")]
     pub config: Option<PathBuf>,

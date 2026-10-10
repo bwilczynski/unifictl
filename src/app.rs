@@ -1,6 +1,7 @@
 use clap::Parser;
 use serde::Serialize;
 
+use crate::cache::Cache;
 use crate::cli::{
     Cli, ClientsCommand, Command, DevicesCommand, LookupCommand, ModeFilter, OutputFormat,
     PortsCommand, StateFilter, StatusFilter,
@@ -72,7 +73,14 @@ fn build_service(cli: &Cli) -> Result<Service> {
     for w in &loaded.warnings {
         eprintln!("warning: {w}");
     }
-    let client = UnifiClient::new(&loaded.config)?;
+    let mut client = UnifiClient::new(&loaded.config)?;
+    if !loaded.config.cache_ttl.is_zero() {
+        client = client.with_cache(Cache::new(
+            config::resolve_cache_dir(&env),
+            loaded.config.cache_ttl,
+            !cli.refresh,
+        ));
+    }
     Ok(Service::new(
         Box::new(client),
         loaded.config.client_history_days,

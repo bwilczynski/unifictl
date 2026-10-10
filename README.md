@@ -51,11 +51,18 @@ api_key = "…"             # UniFi OS (UCG, UDM, …): Settings → Control Pla
 # site = "default"
 # insecure_tls = true     # UniFi gateways ship self-signed certificates
 # client_history_days = 30
+# cache_ttl = 15          # seconds to reuse controller responses; 0 disables
 ```
 
 `chmod 600` the file. Every key can be overridden by an environment variable:
 `UNIFI_HOST`, `UNIFI_API_KEY`, `UNIFI_USERNAME`, `UNIFI_PASSWORD`,
-`UNIFI_SITE`, `UNIFI_INSECURE_TLS`, `UNIFI_CLIENT_HISTORY_DAYS`.
+`UNIFI_SITE`, `UNIFI_INSECURE_TLS`, `UNIFI_CLIENT_HISTORY_DAYS`,
+`UNIFI_CACHE_TTL`.
+
+Controller responses are cached for `cache_ttl` seconds (15 by default) in
+`$XDG_CACHE_HOME/unifictl` (or `~/.cache/unifictl`), readable only by you,
+so a `list` followed by a few `get`s asks the controller once. Pass
+`--refresh` to any command to skip the cache.
 
 ## Use
 
@@ -67,7 +74,7 @@ unifictl ports list [--device ID] [--mode trunk|access] [--state up|down|disable
 unifictl vlans|ssids|wans list | get <id>
 ```
 
-Every command takes `-o json`. IDs are kebab-case names (`us-8-60w`); clients
+Every command takes `-o json` and `--refresh`. IDs are kebab-case names (`us-8-60w`); clients
 add the first MAC byte (`nas-1-68`).
 
 ## Relationship to hlctl
