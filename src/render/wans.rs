@@ -11,7 +11,7 @@ pub fn list(list: &WanList, color: bool) -> String {
     for w in &list.items {
         t.row(&[
             &w.id,
-            &w.name,
+            &style::name(&w.name, color),
             &w.ip_address,
             &format_uptime(w.uptime),
             &style::wan_status(w.status, color),
@@ -24,7 +24,7 @@ pub fn get(w: &WanDetail, color: bool) -> String {
     let mut t = Table::new();
     t.row(&["FIELD", "VALUE"]);
     t.row(&["ID", &w.id]);
-    t.row(&["NAME", &w.name]);
+    t.row(&["NAME", &style::name(&w.name, color)]);
     t.row(&["IP", &w.ip_address]);
     t.row(&["UPTIME", &format_uptime(w.uptime)]);
     t.row(&["STATUS", &style::wan_status(w.status, color)]);

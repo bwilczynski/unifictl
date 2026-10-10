@@ -250,12 +250,20 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
             })
         }
         Command::Vlans { command } => match command {
-            LookupCommand::List => emit_list(out, &svc.list_vlans()?, render::vlans::list),
-            LookupCommand::Get { id } => emit(out, &svc.get_vlan(id)?, render::vlans::get),
+            LookupCommand::List => {
+                emit_list(out, &svc.list_vlans()?, |l| render::vlans::list(l, color))
+            }
+            LookupCommand::Get { id } => {
+                emit(out, &svc.get_vlan(id)?, |v| render::vlans::get(v, color))
+            }
         },
         Command::Ssids { command } => match command {
-            LookupCommand::List => emit_list(out, &svc.list_ssids()?, render::ssids::list),
-            LookupCommand::Get { id } => emit(out, &svc.get_ssid(id)?, render::ssids::get),
+            LookupCommand::List => {
+                emit_list(out, &svc.list_ssids()?, |l| render::ssids::list(l, color))
+            }
+            LookupCommand::Get { id } => {
+                emit(out, &svc.get_ssid(id)?, |s| render::ssids::get(s, color))
+            }
         },
         Command::Wans { command } => match command {
             LookupCommand::List => {

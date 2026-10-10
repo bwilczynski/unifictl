@@ -131,7 +131,7 @@ pub fn list_table(list: &NetworkPortList, wide: bool, color: bool) -> String {
         let state = style::port_state(p.state, color);
         if wide {
             t.row(&[
-                &np.device.name,
+                &style::name(&np.device.name, color),
                 &number,
                 &r.label,
                 &state,
@@ -148,7 +148,7 @@ pub fn list_table(list: &NetworkPortList, wide: bool, color: bool) -> String {
             ]);
         } else {
             t.row(&[
-                &np.device.name,
+                &style::name(&np.device.name, color),
                 &number,
                 &r.label,
                 &state,
