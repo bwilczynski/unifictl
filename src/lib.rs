@@ -5,6 +5,7 @@ pub mod completion;
 pub mod config;
 pub mod error;
 pub mod model;
+mod private_fs;
 pub mod render;
 pub mod service;
 pub mod unifi;

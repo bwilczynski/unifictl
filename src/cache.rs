@@ -6,7 +6,6 @@
 //! the cache only ever saves time, never fails a command.
 
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
@@ -45,14 +44,8 @@ impl Cache {
     }
 
     fn try_put(&self, key: &str, body: &str) -> std::io::Result<()> {
-        create_private_dir(&self.dir)?;
-        let path = self.path(key);
-        let tmp = path.with_extension(format!("tmp{}", std::process::id()));
-        let result = write_private(&tmp, body).and_then(|()| fs::rename(&tmp, &path));
-        if result.is_err() {
-            let _ = fs::remove_file(&tmp);
-        }
-        result
+        crate::private_fs::create_dir(&self.dir)?;
+        crate::private_fs::replace(&self.path(key), body)
     }
 
     fn path(&self, key: &str) -> PathBuf {
@@ -72,32 +65,6 @@ fn file_name(key: &str) -> String {
         }
     }
     out
-}
-
-#[cfg(unix)]
-fn create_private_dir(dir: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::DirBuilderExt;
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(dir)
-}
-
-#[cfg(not(unix))]
-fn create_private_dir(dir: &Path) -> std::io::Result<()> {
-    fs::create_dir_all(dir)
-}
-
-fn write_private(path: &Path, body: &str) -> std::io::Result<()> {
-    let mut opts = fs::OpenOptions::new();
-    opts.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.mode(0o600);
-    }
-    let mut f = opts.open(path)?;
-    f.write_all(body.as_bytes())
 }
 
 #[cfg(test)]
