@@ -83,6 +83,11 @@ pub enum Command {
         #[command(subcommand)]
         command: LookupCommand,
     },
+    /// Create the config file, or check it and the controller connection
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
     /// Print a shell completion script
     Completions {
         #[arg(value_enum)]
@@ -188,4 +193,40 @@ pub enum LookupCommand {
         /// ID, as shown by `list`
         id: String,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ConfigCommand {
+    /// Create the config file, prompting for anything not given as a flag
+    Init(InitArgs),
+    /// Check the config and the connection to the controller, step by step
+    Check,
+}
+
+#[derive(Debug, Default, Args)]
+pub struct InitArgs {
+    /// Controller host or host:port (always reached over https)
+    #[arg(long)]
+    pub host: Option<String>,
+    /// API key (UniFi OS); defaults to $UNIFI_API_KEY
+    #[arg(long, conflicts_with_all = ["username", "password"])]
+    pub api_key: Option<String>,
+    /// Username for a self-hosted Network application
+    #[arg(long)]
+    pub username: Option<String>,
+    /// Password for --username; defaults to $UNIFI_PASSWORD
+    #[arg(long, requires = "username")]
+    pub password: Option<String>,
+    /// Site name (default: picked from the controller's sites)
+    #[arg(long)]
+    pub site: Option<String>,
+    /// Accept the controller's self-signed certificate
+    #[arg(long)]
+    pub insecure_tls: bool,
+    /// Overwrite an existing config file
+    #[arg(long)]
+    pub force: bool,
+    /// Do not contact the controller: skip the site lookup and the final check
+    #[arg(long)]
+    pub no_check: bool,
 }
