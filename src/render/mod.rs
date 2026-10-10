@@ -1,6 +1,7 @@
 //! Table/tree rendering, ported from hlctl's network templates
 //! (homelab-cli/internal/cli/network/templates).
 
+pub mod check;
 pub mod clients;
 pub mod devices;
 pub mod format;
