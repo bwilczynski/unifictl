@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/bwilczynski/unifictl/compare/v0.1.0...v0.2.0) - 2026-10-10
+
+### Added
+
+- add `config init` for guided first-run setup
+- *(setup)* gather host, auth and site for `config init`
+- add `config check` to diagnose setup step by step
+- *(setup)* run setup checks step by step and render the report
+- *(setup)* add DNS and TCP probes
+- *(unifi)* list sites and classify connection failures
+- *(config)* point a missing config at `unifictl config init`
+- *(config)* write config files owner-only via temp file and rename
+- shell completions, including device/client IDs ([#5](https://github.com/bwilczynski/unifictl/pull/5))
+- cache controller responses for a few seconds
+
+### Fixed
+
+- *(setup)* honour --username over env API key, bracket IPv6 hosts, keep secrets out of parse errors
+- [**breaking**] make client IDs unique by suffixing the last two MAC bytes
+
+### Performance
+
+- fetch independent controller endpoints in parallel
+
 ## [0.1.0](https://github.com/bwilczynski/unifictl/releases/tag/v0.1.0) - 2026-10-10
 
 ### Added
