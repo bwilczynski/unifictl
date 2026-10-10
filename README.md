@@ -15,7 +15,23 @@ UCG-Fiber (gateway)
 
 ## Install
 
-Requires [mise](https://mise.jdx.dev).
+Prebuilt binaries for macOS (Apple Silicon and Intel) and Linux (x86_64 and
+arm64) are attached to every [GitHub release](https://github.com/bwilczynski/unifictl/releases).
+Install them with [mise](https://mise.jdx.dev); the command is the same on both
+platforms:
+
+```sh
+mise use -g github:bwilczynski/unifictl          # latest release
+mise use -g github:bwilczynski/unifictl@0.1.0    # or pin a version
+unifictl --version
+```
+
+mise picks the archive matching your OS and CPU and puts `unifictl` on your
+`PATH`; `mise upgrade unifictl` moves to a newer release. Nothing else is
+needed on macOS. On Linux the binary needs glibc 2.35 or newer (Arch,
+Ubuntu 22.04+, Debian 12+, Fedora 36+).
+
+### From source
 
 ```sh
 mise install
@@ -75,3 +91,22 @@ repository, or you can point `HOMELAB_API_DIR` and `HOMELAB_CLI_DIR` at them.
 mise run test   # unit, CLI and golden tests
 mise run lint   # clippy + rustfmt
 ```
+
+## Release
+
+Releases are cut from [conventional commits](https://www.conventionalcommits.org)
+(PR titles and commits are checked by commitlint):
+
+1. On every push to `main`, [release-plz](https://release-plz.dev) opens or
+   updates a release PR that bumps the version in `Cargo.toml` and adds the
+   changes to `CHANGELOG.md`.
+2. Merging that PR tags `vX.Y.Z`.
+3. The tag triggers [dist](https://opensource.axo.dev/cargo-dist/)
+   (`.github/workflows/release.yml`), which builds each target on a native
+   runner and publishes the archives and checksums as a GitHub release.
+
+release-plz needs a `RELEASE_PLZ_TOKEN` repository secret: a fine-grained PAT
+with *Contents* and *Pull requests* read/write on this repository. A tag
+pushed with the default `GITHUB_TOKEN` would not trigger the release workflow.
+`release.yml` is generated: change `dist-workspace.toml` and run
+`dist generate` (dist is pinned in `mise.toml`).

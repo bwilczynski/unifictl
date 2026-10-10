@@ -1,0 +1,8 @@
+# release-plz opens a release PR from conventional commits (version bump +
+# CHANGELOG.md) and tags vX.Y.Z when it merges. The tag triggers dist
+# (.github/workflows/release.yml), which builds and creates the GitHub release.
+[workspace]
+git_only = true
+git_release_enable = false
+semver_check = false
+git_tag_name = "v{{ version }}"
