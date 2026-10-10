@@ -6,7 +6,7 @@
 //! the cache only ever saves time, never fails a command.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 pub struct Cache {
@@ -69,6 +69,8 @@ fn file_name(key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     fn cache(dir: &tempfile::TempDir, ttl_secs: u64, read: bool) -> Cache {

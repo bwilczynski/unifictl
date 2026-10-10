@@ -203,7 +203,7 @@ mod with_fixtures {
 }
 
 #[test]
-fn missing_config_reports_host_requirement() {
+fn missing_config_points_at_init() {
     let dir = tempfile::tempdir().unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_unifictl"))
         .args(["devices", "list"])
@@ -213,5 +213,11 @@ fn missing_config_reports_host_requirement() {
         .unwrap();
     assert_eq!(out.status.code(), Some(1));
     let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.starts_with("Error: config: host is required"), "{err}");
+    assert_eq!(
+        err,
+        format!(
+            "Error: config: no config file at {}; run `unifictl config init`\n",
+            dir.path().join(".config/unifictl/config.toml").display()
+        )
+    );
 }

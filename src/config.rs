@@ -101,13 +101,17 @@ pub fn write(path: &Path, file: &FileConfig) -> Result<()> {
 /// applies env overrides and validates.
 pub fn load(path: &Path, explicit: bool, env: &dyn Fn(&str) -> Option<String>) -> Result<Loaded> {
     let mut warnings = Vec::new();
+    let mut no_file = false;
     let file = match std::fs::read_to_string(path) {
         Ok(text) => {
             warnings.extend(permission_warning(path));
             toml::from_str::<FileConfig>(&text)
                 .map_err(|e| Error::Config(format!("{}: {e}", path.display())))?
         }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !explicit => FileConfig::default(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !explicit => {
+            no_file = true;
+            FileConfig::default()
+        }
         Err(e) => {
             return Err(Error::Config(format!(
                 "cannot read {}: {e}",
@@ -121,6 +125,12 @@ pub fn load(path: &Path, explicit: bool, env: &dyn Fn(&str) -> Option<String>) -
 
     let host = normalize_host(&pick("UNIFI_HOST", file.host).unwrap_or_default())?;
     if host.is_empty() {
+        if no_file {
+            return Err(Error::Config(format!(
+                "no config file at {}; run `unifictl config init`",
+                path.display()
+            )));
+        }
         return Err(missing("host", "UNIFI_HOST", path));
     }
 
@@ -191,7 +201,7 @@ fn missing(key: &str, env: &str, path: &Path) -> Error {
 }
 
 /// Accepts `host`, `host:port` or `https://host[:port]/`.
-fn normalize_host(raw: &str) -> Result<String> {
+pub fn normalize_host(raw: &str) -> Result<String> {
     let host = raw
         .trim()
         .trim_start_matches("https://")
@@ -214,10 +224,57 @@ fn parse_bool(name: &str, v: &str) -> Result<bool> {
     }
 }
 
+/// The env vars that override config keys, in the order `config check` lists them.
+const ENV_VARS: [&str; 8] = [
+    "UNIFI_HOST",
+    "UNIFI_API_KEY",
+    "UNIFI_USERNAME",
+    "UNIFI_PASSWORD",
+    "UNIFI_SITE",
+    "UNIFI_INSECURE_TLS",
+    "UNIFI_CLIENT_HISTORY_DAYS",
+    "UNIFI_CACHE_TTL",
+];
+
+/// `NAME=value` for every non-empty override, secrets masked.
+pub fn env_overrides(env: &dyn Fn(&str) -> Option<String>) -> Vec<String> {
+    ENV_VARS
+        .iter()
+        .filter_map(|&name| {
+            let value = env(name).filter(|v| !v.is_empty())?;
+            let shown = match name {
+                "UNIFI_API_KEY" => mask_key(&value),
+                "UNIFI_PASSWORD" => "****".to_string(),
+                _ => value,
+            };
+            Some(format!("{name}={shown}"))
+        })
+        .collect()
+}
+
+/// Enough of an API key to tell two apart, never enough to use it.
+pub fn mask_key(key: &str) -> String {
+    if key.chars().count() <= 8 {
+        "…".to_string()
+    } else {
+        format!("{}…", key.chars().take(4).collect::<String>())
+    }
+}
+
+/// Permission bits of `path`; `None` off Unix or when it cannot be read.
 #[cfg(unix)]
-fn permission_warning(path: &Path) -> Option<String> {
+pub fn file_mode(path: &Path) -> Option<u32> {
     use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(path).ok()?.permissions().mode();
+    Some(std::fs::metadata(path).ok()?.permissions().mode() & 0o777)
+}
+
+#[cfg(not(unix))]
+pub fn file_mode(_path: &Path) -> Option<u32> {
+    None
+}
+
+fn permission_warning(path: &Path) -> Option<String> {
+    let mode = file_mode(path)?;
     (mode & 0o077 != 0).then(|| {
         format!(
             "{} is readable by other users; run `chmod 600 {}`",
@@ -225,11 +282,6 @@ fn permission_warning(path: &Path) -> Option<String> {
             path.display()
         )
     })
-}
-
-#[cfg(not(unix))]
-fn permission_warning(_path: &Path) -> Option<String> {
-    None
 }
 
 #[cfg(test)]
@@ -379,14 +431,15 @@ mod tests {
     #[test]
     fn validation_messages_name_key_and_env() {
         let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("none.toml");
-        let err = load(&p, false, &env_of(&[("UNIFI_API_KEY", "k")]))
+        let empty = write_file(&dir, "");
+        let err = load(&empty, false, &env_of(&[("UNIFI_API_KEY", "k")]))
             .unwrap_err()
             .to_string();
         assert!(
             err.contains("host is required") && err.contains("UNIFI_HOST"),
             "{err}"
         );
+        let p = dir.path().join("none.toml");
         let err = load(&p, false, &env_of(&[("UNIFI_HOST", "h")]))
             .unwrap_err()
             .to_string();
@@ -523,5 +576,57 @@ mod tests {
             1,
             "temp file left behind"
         );
+    }
+
+    #[test]
+    fn missing_default_file_points_at_init() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("none.toml");
+        let err = load(&p, false, &env_of(&[])).unwrap_err().to_string();
+        assert_eq!(
+            err,
+            format!(
+                "config: no config file at {}; run `unifictl config init`",
+                p.display()
+            )
+        );
+        // An existing file without host keeps the precise message.
+        let p = write_file(&dir, "api_key = \"k\"\n");
+        let err = load(&p, false, &env_of(&[])).unwrap_err().to_string();
+        assert!(err.contains("host is required"), "{err}");
+    }
+
+    #[test]
+    fn env_overrides_are_listed_and_masked() {
+        let env = env_of(&[
+            ("UNIFI_SITE", "lab"),
+            ("UNIFI_API_KEY", "abcdefghijkl"),
+            ("UNIFI_PASSWORD", "hunter2"),
+            ("UNIFI_HOST", ""),
+            ("HOME", "/home/u"),
+        ]);
+        assert_eq!(
+            env_overrides(&env),
+            vec![
+                "UNIFI_API_KEY=abcd…",
+                "UNIFI_PASSWORD=****",
+                "UNIFI_SITE=lab"
+            ]
+        );
+    }
+
+    #[test]
+    fn short_keys_are_fully_masked() {
+        assert_eq!(mask_key("12345678"), "…");
+        assert_eq!(mask_key("123456789"), "1234…");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_mode_reports_permission_bits() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = write_file(&dir, "");
+        assert_eq!(file_mode(&p), Some(0o600));
+        assert_eq!(file_mode(&dir.path().join("missing")), None);
     }
 }
