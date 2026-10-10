@@ -115,7 +115,14 @@ fn collect_auth(
     var: &dyn Fn(&str) -> Option<String>,
     p: &mut dyn Prompter,
 ) -> Result<Auth> {
-    if let Some(key) = args.api_key.clone().or_else(|| var("UNIFI_API_KEY")) {
+    if let Some(key) = &args.api_key {
+        return Ok(Auth::ApiKey(key.clone()));
+    }
+    // A typed --username wins over a key exported for something else.
+    if args.username.is_none()
+        && let Some(key) = var("UNIFI_API_KEY")
+    {
+        p.note("using UNIFI_API_KEY from the environment");
         return Ok(Auth::ApiKey(key));
     }
     let username = match &args.username {
@@ -508,5 +515,50 @@ mod tests {
         .to_string();
         assert!(err.contains("aborted"), "{err}");
         assert!(!target(&dir).exists());
+    }
+
+    #[test]
+    fn username_flag_beats_env_api_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let args = InitArgs {
+            host: Some("h".into()),
+            username: Some("admin".into()),
+            password: Some("pw".into()),
+            no_check: true,
+            ..Default::default()
+        };
+        let env = |k: &str| (k == "UNIFI_API_KEY").then(|| "envkey123456".to_string());
+        run(&args, &target(&dir), &env, &mut Script::new(false, &[])).unwrap();
+        assert_eq!(
+            loaded(&target(&dir)).auth,
+            Auth::Session {
+                username: "admin".into(),
+                password: "pw".into()
+            }
+        );
+    }
+
+    #[test]
+    fn env_api_key_use_is_announced() {
+        let dir = tempfile::tempdir().unwrap();
+        let args = InitArgs {
+            host: Some("h".into()),
+            no_check: true,
+            ..Default::default()
+        };
+        let env = |k: &str| (k == "UNIFI_API_KEY").then(|| "envkey123456".to_string());
+        let mut p = Script::new(true, &[""]);
+        run(&args, &target(&dir), &env, &mut p).unwrap();
+        assert_eq!(
+            loaded(&target(&dir)).auth,
+            Auth::ApiKey("envkey123456".into())
+        );
+        assert!(
+            p.notes
+                .iter()
+                .any(|n| n == "using UNIFI_API_KEY from the environment"),
+            "{:?}",
+            p.notes
+        );
     }
 }
