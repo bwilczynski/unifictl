@@ -221,3 +221,38 @@ fn missing_config_points_at_init() {
         )
     );
 }
+
+fn unifictl_in_home(home: &std::path::Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_unifictl"))
+        .args(args)
+        .env_clear()
+        .env("HOME", home)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn config_check_without_config_fails_with_hint() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = unifictl_in_home(dir.path(), &["config", "check"]);
+    assert_eq!(out.status.code(), Some(1));
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.starts_with("✗  config"), "{stdout}");
+    assert!(
+        stdout.contains("hint: run `unifictl config init`"),
+        "{stdout}"
+    );
+    assert!(
+        out.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let out = unifictl_in_home(dir.path(), &["-o", "json", "config", "check"]);
+    assert_eq!(out.status.code(), Some(1));
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["checks"][0]["step"], "config");
+    assert_eq!(v["checks"].as_array().unwrap().len(), 7);
+}

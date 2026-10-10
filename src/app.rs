@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use clap::Parser;
@@ -6,8 +6,8 @@ use serde::Serialize;
 
 use crate::cache::Cache;
 use crate::cli::{
-    Cli, ClientsCommand, Command, DevicesCommand, LookupCommand, ModeFilter, OutputFormat,
-    PortsCommand, StateFilter, StatusFilter,
+    Cli, ClientsCommand, Command, ConfigCommand, DevicesCommand, LookupCommand, ModeFilter,
+    OutputFormat, PortsCommand, StateFilter, StatusFilter,
 };
 use crate::completion;
 use crate::config;
@@ -15,6 +15,7 @@ use crate::error::{Error, Result};
 use crate::model::{ClientStatus, PortState, VlanMode};
 use crate::render;
 use crate::service::{PortFilter, Service};
+use crate::setup;
 use crate::unifi::client::UnifiClient;
 
 /// Entry point used by `main.rs`; returns the process exit code.
@@ -28,7 +29,10 @@ pub fn main() -> i32 {
         }
     };
     match run(cli) {
-        Ok(out) => write_stdout(&out),
+        Ok(out) => match write_stdout(&out.stdout) {
+            0 => out.code,
+            code => code,
+        },
         Err(e) => {
             eprintln!("Error: {e}");
             1
@@ -53,16 +57,64 @@ fn write_stdout(out: &str) -> i32 {
     }
 }
 
-/// Executes a parsed command and returns everything destined for stdout.
-pub fn run(cli: Cli) -> Result<String> {
-    if let Command::Version = cli.command {
-        return Ok(format!("unifictl {}\n", env!("CARGO_PKG_VERSION")));
+/// What a command prints on stdout and the exit code that follows it.
+pub struct Outcome {
+    pub stdout: String,
+    pub code: i32,
+}
+
+impl Outcome {
+    fn ok(stdout: String) -> Self {
+        Self { stdout, code: 0 }
     }
-    if let Command::Completions { shell } = cli.command {
-        return completion::script(shell);
+}
+
+/// Executes a parsed command.
+pub fn run(cli: Cli) -> Result<Outcome> {
+    let env = |k: &str| std::env::var(k).ok();
+    match &cli.command {
+        Command::Version => {
+            return Ok(Outcome::ok(format!(
+                "unifictl {}\n",
+                env!("CARGO_PKG_VERSION")
+            )));
+        }
+        Command::Completions { shell } => return completion::script(*shell).map(Outcome::ok),
+        Command::Config { command } => return run_config(command, &cli, &env),
+        _ => {}
     }
     let svc = build_service(&cli)?;
-    execute(&svc, &cli.command, cli.output)
+    execute(&svc, &cli.command, cli.output).map(Outcome::ok)
+}
+
+/// The config file in effect, and whether the user named it.
+fn config_location(
+    config_flag: Option<&Path>,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> (PathBuf, bool) {
+    let path = config::resolve_path(config_flag, env);
+    let explicit = config_flag.is_some() || env("UNIFICTL_CONFIG").is_some_and(|v| !v.is_empty());
+    (path, explicit)
+}
+
+fn run_config(
+    cmd: &ConfigCommand,
+    cli: &Cli,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<Outcome> {
+    let (path, explicit) = config_location(cli.config.as_deref(), env);
+    match cmd {
+        ConfigCommand::Check => {}
+        ConfigCommand::Init(_) => {
+            return Err(Error::Other("config init: not implemented yet".into()));
+        }
+    }
+    let report = setup::check::run(&path, explicit, env);
+    let code = if report.ok { 0 } else { 1 };
+    Ok(Outcome {
+        stdout: emit(cli.output, &report, render::check::table)?,
+        code,
+    })
 }
 
 fn build_service(cli: &Cli) -> Result<Service> {
@@ -94,8 +146,7 @@ pub(crate) fn controller_service(
     timeout: Option<Duration>,
 ) -> Result<(Service, Vec<String>)> {
     let env = |k: &str| std::env::var(k).ok();
-    let path = config::resolve_path(config_flag, &env);
-    let explicit = config_flag.is_some() || env("UNIFICTL_CONFIG").is_some_and(|v| !v.is_empty());
+    let (path, explicit) = config_location(config_flag, &env);
     let loaded = config::load(&path, explicit, &env)?;
     let mut client = UnifiClient::new(&loaded.config)?;
     if let Some(timeout) = timeout {
@@ -177,6 +228,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat) -> Result<String
             LookupCommand::List => emit(out, &svc.list_wans()?, render::wans::list),
             LookupCommand::Get { id } => emit(out, &svc.get_wan(id)?, render::wans::get),
         },
+        Command::Config { .. } => unreachable!("config commands are handled by run"),
         Command::Completions { shell } => completion::script(*shell),
         Command::Version => Ok(format!("unifictl {}\n", env!("CARGO_PKG_VERSION"))),
     }
