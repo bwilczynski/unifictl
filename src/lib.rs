@@ -8,4 +8,5 @@ pub mod model;
 mod private_fs;
 pub mod render;
 pub mod service;
+pub mod setup;
 pub mod unifi;
