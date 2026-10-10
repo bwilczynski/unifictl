@@ -1,6 +1,7 @@
 //! Config: ~/.config/unifictl/config.toml overlaid with UNIFI_* env vars.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::Deserialize;
 
@@ -8,6 +9,7 @@ use crate::error::{Error, Result};
 
 pub const DEFAULT_SITE: &str = "default";
 const DEFAULT_HISTORY_DAYS: i64 = 30;
+const DEFAULT_CACHE_TTL_SECS: u64 = 15;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Auth {
@@ -25,6 +27,8 @@ pub struct Config {
     pub site: String,
     pub insecure_tls: bool,
     pub client_history_days: i64,
+    /// How long controller responses are reused; zero disables the cache.
+    pub cache_ttl: Duration,
 }
 
 #[derive(Debug)]
@@ -44,6 +48,7 @@ struct FileConfig {
     site: Option<String>,
     insecure_tls: Option<bool>,
     client_history_days: Option<i64>,
+    cache_ttl: Option<u64>,
 }
 
 /// `--config` > `UNIFICTL_CONFIG` > `$XDG_CONFIG_HOME/unifictl/config.toml` >
@@ -61,6 +66,16 @@ pub fn resolve_path(flag: Option<&Path>, env: &dyn Fn(&str) -> Option<String>) -
         .or_else(|| var("HOME").map(|h| PathBuf::from(h).join(".config")))
         .unwrap_or_else(|| PathBuf::from(".config"));
     base.join("unifictl").join("config.toml")
+}
+
+/// `$XDG_CACHE_HOME/unifictl` > `$HOME/.cache/unifictl`.
+pub fn resolve_cache_dir(env: &dyn Fn(&str) -> Option<String>) -> PathBuf {
+    let var = |k: &str| env(k).filter(|v| !v.is_empty());
+    let base = var("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| var("HOME").map(|h| PathBuf::from(h).join(".cache")))
+        .unwrap_or_else(|| PathBuf::from(".cache"));
+    base.join("unifictl")
 }
 
 /// Reads `path` (a missing file is fine unless the user named it explicitly),
@@ -127,6 +142,15 @@ pub fn load(path: &Path, explicit: bool, env: &dyn Fn(&str) -> Option<String>) -
         days
     };
 
+    let cache_ttl = match var("UNIFI_CACHE_TTL") {
+        Some(v) => v.parse().map_err(|_| {
+            Error::Config(format!(
+                "UNIFI_CACHE_TTL: expected a number of seconds, got {v:?}"
+            ))
+        })?,
+        None => file.cache_ttl.unwrap_or(DEFAULT_CACHE_TTL_SECS),
+    };
+
     Ok(Loaded {
         config: Config {
             host,
@@ -134,6 +158,7 @@ pub fn load(path: &Path, explicit: bool, env: &dyn Fn(&str) -> Option<String>) -
             site,
             insecure_tls,
             client_history_days,
+            cache_ttl: Duration::from_secs(cache_ttl),
         },
         warnings,
     })
@@ -251,6 +276,7 @@ mod tests {
                 site: "default".into(),
                 insecure_tls: false,
                 client_history_days: 30,
+                cache_ttl: Duration::from_secs(15),
             }
         );
         assert!(l.warnings.is_empty());
@@ -278,6 +304,28 @@ mod tests {
                 c.client_history_days
             ),
             ("b", "s2", true, 3)
+        );
+    }
+
+    #[test]
+    fn cache_ttl_from_file_env_and_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = write(&dir, "host = \"h\"\napi_key = \"k\"\ncache_ttl = 60\n");
+        let ttl = |env: &[(&str, &str)]| load(&p, false, &env_of(env)).map(|l| l.config.cache_ttl);
+        assert_eq!(ttl(&[]).unwrap(), Duration::from_secs(60));
+        assert_eq!(ttl(&[("UNIFI_CACHE_TTL", "0")]).unwrap(), Duration::ZERO);
+        let err = ttl(&[("UNIFI_CACHE_TTL", "-1")]).unwrap_err().to_string();
+        assert!(err.contains("UNIFI_CACHE_TTL"), "{err}");
+    }
+
+    #[test]
+    fn resolve_cache_dir_precedence() {
+        let env = env_of(&[("XDG_CACHE_HOME", "/xdg"), ("HOME", "/home/u")]);
+        assert_eq!(resolve_cache_dir(&env), PathBuf::from("/xdg/unifictl"));
+        let env = env_of(&[("HOME", "/home/u")]);
+        assert_eq!(
+            resolve_cache_dir(&env),
+            PathBuf::from("/home/u/.cache/unifictl")
         );
     }
 

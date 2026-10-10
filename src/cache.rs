@@ -1,0 +1,188 @@
+//! Short-lived on-disk cache of raw controller responses, so a `list`
+//! followed by a few `get`s does not wait on the controller every time.
+//!
+//! One file per request URL under the cache directory. Entries are fresh for
+//! `ttl` after they were written (file mtime). Every failure is a cache miss:
+//! the cache only ever saves time, never fails a command.
+
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
+
+pub struct Cache {
+    dir: PathBuf,
+    ttl: Duration,
+    /// False with `--refresh`: skip reads, but still store fresh responses.
+    read: bool,
+}
+
+impl Cache {
+    pub fn new(dir: PathBuf, ttl: Duration, read: bool) -> Self {
+        Self { dir, ttl, read }
+    }
+
+    /// The body stored for `key` if it is younger than the TTL.
+    pub fn get(&self, key: &str) -> Option<String> {
+        if !self.read {
+            return None;
+        }
+        let path = self.path(key);
+        let modified = fs::metadata(&path).ok()?.modified().ok()?;
+        // A modification time in the future (clock change) is stale too.
+        let age = SystemTime::now().duration_since(modified).ok()?;
+        if age >= self.ttl {
+            return None;
+        }
+        fs::read_to_string(path).ok()
+    }
+
+    /// Stores `body` for `key`, best effort. Written to a temporary file and
+    /// renamed, so concurrent readers never see a partial body. Owner-only
+    /// permissions: responses list every client on the network.
+    pub fn put(&self, key: &str, body: &str) {
+        let _ = self.try_put(key, body);
+    }
+
+    fn try_put(&self, key: &str, body: &str) -> std::io::Result<()> {
+        create_private_dir(&self.dir)?;
+        let path = self.path(key);
+        let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+        let result = write_private(&tmp, body).and_then(|()| fs::rename(&tmp, &path));
+        if result.is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
+        result
+    }
+
+    fn path(&self, key: &str) -> PathBuf {
+        self.dir.join(format!("{}.json", file_name(key)))
+    }
+}
+
+/// Encodes `key` as a file name: `[A-Za-z0-9.-]` kept, every other byte
+/// (including `_` itself) becomes `_XX`, so distinct keys never collide.
+fn file_name(key: &str) -> String {
+    let mut out = String::with_capacity(key.len());
+    for b in key.bytes() {
+        if b.is_ascii_alphanumeric() || b == b'.' || b == b'-' {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("_{b:02x}"));
+        }
+    }
+    out
+}
+
+#[cfg(unix)]
+fn create_private_dir(dir: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)
+}
+
+#[cfg(not(unix))]
+fn create_private_dir(dir: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dir)
+}
+
+fn write_private(path: &Path, body: &str) -> std::io::Result<()> {
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(path)?;
+    f.write_all(body.as_bytes())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cache(dir: &tempfile::TempDir, ttl_secs: u64, read: bool) -> Cache {
+        Cache::new(
+            dir.path().join("unifictl"),
+            Duration::from_secs(ttl_secs),
+            read,
+        )
+    }
+
+    #[test]
+    fn round_trip_within_ttl() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = cache(&dir, 60, true);
+        assert_eq!(c.get("https://h/a"), None);
+        c.put("https://h/a", "{\"data\":[]}");
+        assert_eq!(c.get("https://h/a").as_deref(), Some("{\"data\":[]}"));
+        assert_eq!(c.get("https://h/b"), None);
+    }
+
+    #[test]
+    fn expired_entry_is_a_miss() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = cache(&dir, 60, true);
+        c.put("k", "old");
+        let f = fs::File::options().write(true).open(c.path("k")).unwrap();
+        f.set_modified(SystemTime::now() - Duration::from_secs(61))
+            .unwrap();
+        assert_eq!(c.get("k"), None);
+        c.put("k", "new");
+        assert_eq!(c.get("k").as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn future_mtime_is_a_miss() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = cache(&dir, 60, true);
+        c.put("k", "v");
+        let f = fs::File::options().write(true).open(c.path("k")).unwrap();
+        f.set_modified(SystemTime::now() + Duration::from_secs(3600))
+            .unwrap();
+        assert_eq!(c.get("k"), None);
+    }
+
+    #[test]
+    fn refresh_skips_reads_but_still_writes() {
+        let dir = tempfile::tempdir().unwrap();
+        let refresh = cache(&dir, 60, false);
+        refresh.put("k", "v");
+        assert_eq!(refresh.get("k"), None);
+        assert_eq!(cache(&dir, 60, true).get("k").as_deref(), Some("v"));
+    }
+
+    #[test]
+    fn unwritable_dir_is_silently_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let blocker = dir.path().join("file");
+        fs::write(&blocker, "").unwrap();
+        let c = Cache::new(blocker.join("unifictl"), Duration::from_secs(60), true);
+        c.put("k", "v");
+        assert_eq!(c.get("k"), None);
+    }
+
+    #[test]
+    fn file_names_are_safe_and_distinct() {
+        assert_eq!(
+            file_name("https://h:8443/a_b?x=1&y"),
+            "https_3a_2f_2fh_3a8443_2fa_5fb_3fx_3d1_26y"
+        );
+        assert_ne!(file_name("a/b"), file_name("a_b"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn entries_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let c = cache(&dir, 60, true);
+        c.put("k", "v");
+        let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&c.dir), 0o700);
+        assert_eq!(mode(&c.path("k")), 0o600);
+    }
+}

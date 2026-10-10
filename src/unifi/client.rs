@@ -11,6 +11,7 @@ use serde_json::json;
 
 use super::UnifiApi;
 use super::types::{ClientV2, Device, Envelope, NetworkConf, Sta, WlanConf};
+use crate::cache::Cache;
 use crate::config::{Auth, Config};
 use crate::error::{Error, Result};
 
@@ -24,6 +25,7 @@ pub struct UnifiClient {
     /// Session mode only: whether the cookie jar holds a live session. Locked
     /// for the duration of a login, so parallel reads share one login.
     logged_in: Mutex<bool>,
+    cache: Option<Cache>,
 }
 
 impl UnifiClient {
@@ -56,7 +58,14 @@ impl UnifiClient {
             site,
             http,
             logged_in: Mutex::new(false),
+            cache: None,
         })
+    }
+
+    /// Serves fresh responses from `cache` and stores new ones in it.
+    pub fn with_cache(mut self, cache: Cache) -> Self {
+        self.cache = Some(cache);
+        self
     }
 
     /// UniFi OS proxies the Network app at /proxy/network; legacy controllers
@@ -110,21 +119,37 @@ impl UnifiClient {
             .map_err(|e| Error::Unifi(format!("unifi request: {}", describe(&e))))
     }
 
-    /// GET `{prefix}{path}`; in session mode re-authenticates once on 401.
+    /// GET `{prefix}{path}`, from the cache when fresh. Only responses that
+    /// parse are cached.
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        let url = format!("{}{}{}", self.base_url, self.prefix(), path);
+        let cached = self.cache.as_ref().and_then(|c| c.get(&url));
+        if let Some(value) = cached.and_then(|body| serde_json::from_str(&body).ok()) {
+            return Ok(value);
+        }
+        let body = self.fetch(&url)?;
+        let value = serde_json::from_str(&body)
+            .map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))?;
+        if let Some(cache) = &self.cache {
+            cache.put(&url, &body);
+        }
+        Ok(value)
+    }
+
+    /// GET `url` and return the body; in session mode re-authenticates once on 401.
+    fn fetch(&self, url: &str) -> Result<String> {
         let session = matches!(self.auth, Auth::Session { .. });
         if session {
             self.ensure_login(false)?;
         }
-        let url = format!("{}{}{}", self.base_url, self.prefix(), path);
-        let mut resp = self.send(&url)?;
+        let mut resp = self.send(url)?;
         if resp.status() == StatusCode::UNAUTHORIZED {
             if !session {
                 return Err(Error::Unifi("unifi request: invalid API key (401)".into()));
             }
             self.ensure_login(true)
                 .map_err(|e| Error::Unifi(format!("unifi re-auth: {e}")))?;
-            resp = self.send(&url)?;
+            resp = self.send(url)?;
             if resp.status() == StatusCode::UNAUTHORIZED {
                 return Err(Error::Unifi(
                     "unifi request: unauthorized after re-auth".into(),
@@ -137,10 +162,8 @@ impl UnifiClient {
                 resp.status().as_u16()
             )));
         }
-        let body = resp
-            .text()
-            .map_err(|e| Error::Unifi(format!("unifi read body: {}", describe(&e))))?;
-        serde_json::from_str(&body).map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))
+        resp.text()
+            .map_err(|e| Error::Unifi(format!("unifi read body: {}", describe(&e))))
     }
 
     /// Bare-array v2 endpoint; a `null` body is an empty list (as in Go).
@@ -453,6 +476,76 @@ mod tests {
         .unwrap();
         let err = c.devices().unwrap_err().to_string();
         assert!(err.starts_with("unifi request:"), "{err}");
+    }
+
+    fn cache_in(dir: &tempfile::TempDir, read: bool) -> Cache {
+        Cache::new(dir.path().to_path_buf(), Duration::from_secs(60), read)
+    }
+
+    #[test]
+    fn fresh_responses_come_from_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/api/s/default/stat/device");
+            then.status(200)
+                .json_body(json!({"data": [{"name": "US 8", "type": "usw"}]}));
+        });
+        for _ in 0..2 {
+            let c = api_key_client(&server).with_cache(cache_in(&dir, true));
+            assert_eq!(c.devices().unwrap()[0].name, "US 8");
+        }
+        m.assert_calls(1);
+
+        let c = api_key_client(&server).with_cache(cache_in(&dir, false));
+        c.devices().unwrap();
+        m.assert_calls(2);
+    }
+
+    #[test]
+    fn errors_and_unparseable_bodies_are_not_cached() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = MockServer::start();
+        let mut m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/api/s/default/stat/device");
+            then.status(200).body("<html>");
+        });
+        let c = api_key_client(&server).with_cache(cache_in(&dir, true));
+        assert!(c.devices().is_err());
+        m.delete();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/api/s/default/stat/device");
+            then.status(500);
+        });
+        assert!(c.devices().is_err());
+        assert!(c.devices().is_err());
+        m.assert_calls(2);
+    }
+
+    #[test]
+    fn session_cache_hit_skips_login() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = MockServer::start();
+        let login = server.mock(|when, then| {
+            when.method(POST).path("/api/login");
+            then.status(200).json_body(json!({}));
+        });
+        server.mock(|when, then| {
+            when.method(GET).path("/api/s/lab/rest/networkconf");
+            then.status(200).json_body(json!({"data": []}));
+        });
+        session_client(&server)
+            .with_cache(cache_in(&dir, true))
+            .network_conf()
+            .unwrap();
+        session_client(&server)
+            .with_cache(cache_in(&dir, true))
+            .network_conf()
+            .unwrap();
+        login.assert_calls(1);
     }
 
     #[test]
