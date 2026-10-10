@@ -2,6 +2,7 @@
 
 use super::Table;
 use super::format::{format_bytes_per_sec, format_link_speed, format_uptime};
+use super::style;
 use crate::model::{
     DevicePort, NetworkPort, NetworkPortList, PortState, TaggedScope, VlanMode, VlanRef,
 };
@@ -84,7 +85,7 @@ pub fn decorate_port(p: &DevicePort) -> PortRow {
 }
 
 /// `ports_list.tmpl`.
-pub fn list_table(list: &NetworkPortList, wide: bool) -> String {
+pub fn list_table(list: &NetworkPortList, wide: bool, color: bool) -> String {
     let mut t = Table::new();
     if wide {
         t.row(&[
@@ -127,13 +128,13 @@ pub fn list_table(list: &NetworkPortList, wide: bool) -> String {
         let p = &np.port;
         let r = decorate_port(p);
         let number = p.number.to_string();
-        let state = p.state.as_str();
+        let state = style::port_state(p.state, color);
         if wide {
             t.row(&[
                 &np.device.name,
                 &number,
                 &r.label,
-                state,
+                &state,
                 &r.link_speed,
                 &r.vlan_mode,
                 &r.native_vlan,
@@ -150,7 +151,7 @@ pub fn list_table(list: &NetworkPortList, wide: bool) -> String {
                 &np.device.name,
                 &number,
                 &r.label,
-                state,
+                &state,
                 &r.vlan_mode,
                 &r.native_vlan,
                 &r.tagged_vlans,
@@ -300,7 +301,7 @@ mod tests {
                 np("CGF-01", 3),
             ],
         };
-        let order: Vec<String> = list_table(&list, false)
+        let order: Vec<String> = list_table(&list, false, false)
             .lines()
             .skip(1)
             .map(|l| {
@@ -322,11 +323,11 @@ mod tests {
                 device: DeviceRef::new("core".into(), "Switch-Core".into()),
             }],
         };
-        let narrow = list_table(&list, false);
+        let narrow = list_table(&list, false, false);
         assert!(narrow.starts_with("DEVICE"));
         assert!(narrow.lines().next().unwrap().ends_with("CONNECTED TO"));
         assert!(!narrow.contains("RX/S"));
-        let wide = list_table(&list, true);
+        let wide = list_table(&list, true, false);
         assert!(wide.lines().next().unwrap().contains("LINK SPEED"));
         assert!(wide.contains("2.0 KB/s"));
     }

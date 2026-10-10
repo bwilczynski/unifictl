@@ -16,6 +16,10 @@ pub struct Cli {
     #[arg(short, long, global = true, value_enum, default_value_t = OutputFormat::Table)]
     pub output: OutputFormat,
 
+    /// When to colour status cells in tables
+    #[arg(long, global = true, value_enum, value_name = "WHEN", default_value_t = ColorMode::Auto)]
+    pub color: ColorMode,
+
     /// Ignore cached controller responses and fetch fresh ones
     #[arg(long, global = true)]
     pub refresh: bool,
@@ -37,6 +41,14 @@ pub struct Cli {
 pub enum OutputFormat {
     Table,
     Json,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ColorMode {
+    /// When stdout is a terminal and NO_COLOR is unset or empty
+    Auto,
+    Always,
+    Never,
 }
 
 #[derive(Debug, Subcommand)]
