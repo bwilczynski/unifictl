@@ -9,6 +9,8 @@ pub enum Paint {
     Green,
     Red,
     Yellow,
+    Blue,
+    BoldBlue,
     Dim,
 }
 
@@ -18,6 +20,8 @@ impl Paint {
             Self::Green => "32",
             Self::Red => "31",
             Self::Yellow => "33",
+            Self::Blue => "34",
+            Self::BoldBlue => "1;34",
             Self::Dim => "2",
         }
     }
@@ -65,6 +69,16 @@ pub fn port_state(s: PortState, on: bool) -> String {
         PortState::Disabled => Paint::Yellow,
     };
     paint(s.as_str(), p, on)
+}
+
+/// A name, blue like file names in `eza`.
+pub fn name(text: &str, on: bool) -> String {
+    paint(text, Paint::Blue, on)
+}
+
+/// A device name in `topology`, bold so devices stand out from clients.
+pub fn device_name(text: &str, on: bool) -> String {
+    paint(text, Paint::BoldBlue, on)
 }
 
 /// The `config check` mark for `s`.
@@ -128,6 +142,18 @@ mod tests {
         assert_eq!(check_mark(Status::Warn, true), "\x1b[33m!\x1b[0m");
         assert_eq!(check_mark(Status::Fail, true), "\x1b[31m✗\x1b[0m");
         assert_eq!(check_mark(Status::Skip, true), "\x1b[2m–\x1b[0m");
+    }
+
+    #[test]
+    fn names_are_plain_blue() {
+        assert_eq!(name("US 8", true), "\x1b[34mUS 8\x1b[0m");
+        assert_eq!(name("US 8", false), "US 8");
+    }
+
+    #[test]
+    fn device_names_are_bold_blue() {
+        assert_eq!(device_name("CGF-01", true), "\x1b[1;34mCGF-01\x1b[0m");
+        assert_eq!(device_name("CGF-01", false), "CGF-01");
     }
 
     #[test]

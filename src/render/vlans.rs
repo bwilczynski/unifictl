@@ -1,22 +1,28 @@
 //! vlans_list.tmpl, vlans_get.tmpl.
 
 use super::Table;
+use super::style;
 use crate::model::{DhcpMode, VlanDetail, VlanList};
 
-pub fn list(list: &VlanList) -> String {
+pub fn list(list: &VlanList, color: bool) -> String {
     let mut t = Table::new();
     t.row(&["ID", "NAME", "VLAN ID", "SUBNET"]);
     for v in &list.items {
-        t.row(&[&v.id, &v.name, &v.vlan_id.to_string(), &v.subnet]);
+        t.row(&[
+            &v.id,
+            &style::name(&v.name, color),
+            &v.vlan_id.to_string(),
+            &v.subnet,
+        ]);
     }
     t.finish()
 }
 
-pub fn get(v: &VlanDetail) -> String {
+pub fn get(v: &VlanDetail, color: bool) -> String {
     let mut t = Table::new();
     t.row(&["FIELD", "VALUE"]);
     t.row(&["ID", &v.id]);
-    t.row(&["NAME", &v.name]);
+    t.row(&["NAME", &style::name(&v.name, color)]);
     t.row(&["VLAN ID", &v.vlan_id.to_string()]);
     t.row(&["SUBNET", &v.subnet]);
     t.row(&["GATEWAY IP", &v.gateway_ip]);
@@ -57,7 +63,7 @@ mod tests {
 
     #[test]
     fn server_mode_shows_range_not_relay() {
-        let out = get(&detail(DhcpMode::Server));
+        let out = get(&detail(DhcpMode::Server), false);
         assert!(
             out.lines().any(
                 |l| l.starts_with("DHCP RANGE") && l.ends_with("192.168.20.6 - 192.168.20.254")
@@ -69,7 +75,7 @@ mod tests {
 
     #[test]
     fn relay_mode_shows_relay_not_range() {
-        let out = get(&detail(DhcpMode::Relay));
+        let out = get(&detail(DhcpMode::Relay), false);
         assert!(
             out.lines()
                 .any(|l| l.starts_with("RELAY") && l.ends_with("10.0.0.1"))

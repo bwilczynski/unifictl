@@ -20,7 +20,7 @@ pub fn tree(topo: &NetworkTopology, include_wireless: bool, color: bool) -> Resu
     for node in &topo.nodes {
         match node {
             TopologyNode::Device(d) => {
-                let mut s = format!("{} ({})", d.name, d.device_type);
+                let mut s = format!("{} ({})", style::device_name(&d.name, color), d.device_type);
                 if let Some(n) = d.num_clients.filter(|&n| n > 0) {
                     s.push_str(&format!(" [{n} clients]"));
                 }
@@ -34,7 +34,7 @@ pub fn tree(topo: &NetworkTopology, include_wireless: bool, color: bool) -> Resu
                     &c.id,
                     format!(
                         "{} (client, {}, {})",
-                        c.name,
+                        style::name(&c.name, color),
                         c.connection_type,
                         style::client_status(c.status, color)
                     ),

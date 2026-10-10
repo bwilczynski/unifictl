@@ -14,6 +14,7 @@ Success looks like:
 
 - On a terminal, status cells stand out at a glance (green healthy, red broken,
   dim for normal-but-inactive, yellow disabled), in the terminal's own palette.
+- Names are blue, like file names in `eza`, so the eye finds the item column.
 - `unifictl clients list --status offline -o ids | xargs -n1 unifictl clients get`
   works.
 - Golden tests stay colourless.
@@ -48,7 +49,8 @@ unit-testable. `-o json` and `-o ids` never colour.
 
 New `src/render/style.rs`:
 
-- `Paint` enum: `Green` (`32`), `Red` (`31`), `Yellow` (`33`), `Dim` (`2`).
+- `Paint` enum: `Green` (`32`), `Red` (`31`), `Yellow` (`33`), `Blue` (`34`),
+  `BoldBlue` (`1;34`), `Dim` (`2`).
 - `fn paint(text: &str, p: Paint, on: bool) -> String`: wraps in
   `\x1b[<n>m … \x1b[0m` when `on`, returns `text` unchanged otherwise.
 - One mapping function per status type, so the same word can differ by context:
@@ -60,6 +62,11 @@ New `src/render/style.rs`:
 | client `offline`, port `down` | Dim | normal state; red would be noise |
 | port `disabled` | Yellow | deliberately off |
 | `config check` ✓ / ! / ✗ / – | Green / Yellow / Red / Dim | |
+| a name (see below) | Blue | like file names in `eza` |
+| a device name in `topology` | BoldBlue | devices stand out from clients, like eza's bold directories |
+
+`fn name(text: &str, on: bool) -> String` paints a name blue;
+`fn device_name(text: &str, on: bool) -> String` paints it bold blue.
 
 `render::Table` builds its `TabWriter` with `.ansi(true)` so escape sequences do
 not count toward column widths (the `ansi_formatting` crate feature is
@@ -75,14 +82,26 @@ deprecated in favour of this builder method).
   (device nodes carry no status).
 - `config check`: the mark column.
 
+Names are blue wherever the header says NAME, plus two columns that hold the
+row's own name under another header:
+
+- the NAME column of `devices`, `clients`, `vlans`, `ssids` and `wans list`;
+- the NAME row of every `get`, and NAME columns in `get` sections (the gateway's
+  WANS, an SSID's CLIENTS and BROADCASTING APs);
+- the DEVICE column of `ports list`;
+- node names in `topology`: device names bold blue, client names plain blue.
+  Device names elsewhere (e.g. `devices list`) stay plain blue.
+
+IDs stay plain (they are what gets copied into `get`), and so do names that
+appear inside other fields (UPLINK, SWITCH, AP, CONNECTED TO).
+
 Only stdout is coloured; `Error: …` and warnings on stderr stay plain.
 
 ### Threading
 
-Renderers that colour gain a `color: bool` parameter, e.g.
-`devices::list(list, color)`, `devices::get(detail, all_ports, color)`,
-`ports::list_table(list, wide, color)`. Renderers with no status cells (vlans,
-ssids) are unchanged.
+Every renderer that shows a status or a name takes a `color: bool` parameter,
+e.g. `devices::list(list, color)`, `devices::get(detail, all_ports, color)`,
+`ports::list_table(list, wide, color)`, `vlans::list(list, color)`.
 
 ## `-o ids`
 
@@ -126,5 +145,5 @@ Existing goldens are unchanged: the harness captures stdout through a pipe, so
 
 - `--wide` on every list command ([#14](https://github.com/bwilczynski/unifictl/issues/14)).
 - Configurable colours or a colour theme in `config.toml`.
-- Colouring anything other than status cells (headers, IDs, traffic).
+- Colouring anything other than status cells and names (headers, IDs, traffic).
 - A port ID for `ports list -o ids`.

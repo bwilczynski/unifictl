@@ -79,6 +79,11 @@ mod with_fixtures {
             &["wans", "list"],
             &["wans", "get", "internet-2"],
             &["topology", "--include-clients"],
+            &["devices", "get", "cgf-01"],
+            &["vlans", "list"],
+            &["vlans", "get", "lan-mgmt"],
+            &["ssids", "list"],
+            &["ssids", "get", "home-wifi"],
         ] {
             let plain = stdout(&run(args));
             let mut colored_args = vec!["--color", "always"];
@@ -109,6 +114,59 @@ mod with_fixtures {
             "--include-clients",
         ]));
         assert!(topo.contains("(client, wired, \x1b[2moffline\x1b[0m)"));
+    }
+
+    #[test]
+    fn names_are_blue_and_ids_plain() {
+        let blue = |args: &[&str], name: &str| {
+            let mut a = vec!["--color", "always"];
+            a.extend(args);
+            let out = stdout(&run(&a));
+            assert!(
+                out.contains(&format!("\x1b[34m{name}\x1b[0m")),
+                "{args:?}: {name} not blue in\n{out}"
+            );
+            out
+        };
+        let devices = blue(&["devices", "list"], "US 8");
+        assert!(
+            devices.lines().nth(1).unwrap().starts_with("us-8 "),
+            "ID plain"
+        );
+        blue(&["clients", "list"], "nas-1");
+        blue(&["vlans", "list"], "LAN-MGMT");
+        blue(&["ssids", "list"], "home-wifi");
+        blue(&["wans", "list"], "Internet 1");
+        blue(&["ports", "list"], "CGF-01");
+        let topo = stdout(&run(&[
+            "--color",
+            "always",
+            "topology",
+            "--include-clients",
+        ]));
+        assert!(
+            topo.starts_with("\x1b[1;34mCGF-01\x1b[0m (gateway)"),
+            "{topo}"
+        );
+        assert!(
+            topo.contains("\x1b[1;34mUS 8 60W\x1b[0m (switch)"),
+            "{topo}"
+        );
+        assert!(topo.contains("\x1b[34mnas-1\x1b[0m (client"), "{topo}");
+        blue(&["devices", "get", "us-8"], "US 8");
+        blue(&["devices", "get", "cgf-01"], "Internet 1");
+        blue(&["clients", "get", "nas-1-0002"], "nas-1");
+        blue(&["vlans", "get", "lan-mgmt"], "LAN-MGMT");
+        blue(&["wans", "get", "internet-1"], "Internet 1");
+        let ssid = blue(&["ssids", "get", "home-wifi"], "UAP-01");
+        assert!(ssid.contains("\x1b[34mhome-wifi\x1b[0m"));
+        let client = stdout(&run(&["--color", "always", "clients", "get", "nas-1-0002"]));
+        assert!(
+            client
+                .lines()
+                .any(|l| l.starts_with("SWITCH") && l.ends_with(" US 8 60W")),
+            "names inside other fields stay plain"
+        );
     }
 
     #[test]

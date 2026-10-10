@@ -11,7 +11,7 @@ pub fn list(list: &NetworkClientList, color: bool) -> String {
     for c in &list.items {
         t.row(&[
             &c.id,
-            &c.name,
+            &style::name(&c.name, color),
             &c.mac,
             c.ip.as_deref().unwrap_or(""),
             &style::client_status(c.status, color),
@@ -29,7 +29,7 @@ pub fn get(detail: &NetworkClientDetail, color: bool) -> String {
             common(
                 &mut t,
                 &c.id,
-                &c.name,
+                &style::name(&c.name, color),
                 &c.mac,
                 c.ip.as_deref(),
                 c.connection_type.as_str(),
@@ -50,7 +50,7 @@ pub fn get(detail: &NetworkClientDetail, color: bool) -> String {
             common(
                 &mut t,
                 &c.id,
-                &c.name,
+                &style::name(&c.name, color),
                 &c.mac,
                 c.ip.as_deref(),
                 c.connection_type.as_str(),

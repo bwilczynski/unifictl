@@ -12,7 +12,7 @@ pub fn list(list: &NetworkDeviceList, color: bool) -> String {
     for d in &list.items {
         t.row(&[
             &d.id,
-            &d.name,
+            &style::name(&d.name, color),
             &d.mac,
             &d.ip,
             d.device_type.as_str(),
@@ -37,7 +37,7 @@ pub fn get(detail: &NetworkDeviceDetail, all_ports: bool, color: bool) -> String
             section(&mut t, "--- WANS ---");
             t.row(&["ID", "NAME"]);
             for w in &gw.wans {
-                t.row(&[&w.id, &w.name]);
+                t.row(&[&w.id, &style::name(&w.name, color)]);
             }
         }
         NetworkDeviceDetail::AccessPoint(ap) => {
@@ -67,7 +67,7 @@ fn section(t: &mut Table, title: &str) {
 fn base(t: &mut Table, b: &DeviceBase, color: bool) {
     t.row(&["FIELD", "VALUE"]);
     t.row(&["ID", &b.id]);
-    t.row(&["NAME", &b.name]);
+    t.row(&["NAME", &style::name(&b.name, color)]);
     t.row(&["MAC", &b.mac]);
     t.row(&["IP", &b.ip]);
     t.row(&["TYPE", b.device_type.as_str()]);
