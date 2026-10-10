@@ -77,6 +77,28 @@ unifictl vlans|ssids|wans list | get <id>
 Every command takes `-o json` and `--refresh`. IDs are kebab-case names (`us-8-60w`); clients
 add the last two MAC bytes (`nas-1-0002`).
 
+## Shell completions
+
+`unifictl completions <bash|zsh|fish|powershell|elvish>` prints a script that
+completes subcommands, flags and IDs: `devices get <TAB>`, `clients get
+<TAB>`, `vlans|ssids|wans get <TAB>` and `ports list --device <TAB>`. Load it
+from your shell's startup file:
+
+```sh
+source <(unifictl completions bash)              # ~/.bashrc
+source <(unifictl completions zsh)               # ~/.zshrc, after compinit
+unifictl completions fish | source               # ~/.config/fish/config.fish
+unifictl completions powershell | Out-String | Invoke-Expression   # $PROFILE
+eval (unifictl completions elvish | slurp)       # ~/.config/elvish/rc.elv
+```
+
+The script calls back into `unifictl` on every TAB, so it keeps up with new
+versions without being regenerated. IDs come from the controller through the
+response cache, so only the first TAB after `cache_ttl` waits on it, for at
+most 3 seconds. Completion reads the config from `UNIFICTL_CONFIG` or the
+default path (not `--config`) and completes no IDs if the controller cannot be
+reached.
+
 ## Relationship to hlctl
 
 unifictl is a port of `hlctl network …`

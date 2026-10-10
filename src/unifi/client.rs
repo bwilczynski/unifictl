@@ -26,6 +26,7 @@ pub struct UnifiClient {
     /// for the duration of a login, so parallel reads share one login.
     logged_in: Mutex<bool>,
     cache: Option<Cache>,
+    timeout: Duration,
 }
 
 impl UnifiClient {
@@ -45,7 +46,6 @@ impl UnifiClient {
         insecure_tls: bool,
     ) -> Result<Self> {
         let http = Client::builder()
-            .timeout(TIMEOUT)
             // Never follow redirects: reqwest would forward X-API-KEY to the new location.
             .redirect(reqwest::redirect::Policy::none())
             .cookie_store(true)
@@ -59,12 +59,19 @@ impl UnifiClient {
             http,
             logged_in: Mutex::new(false),
             cache: None,
+            timeout: TIMEOUT,
         })
     }
 
     /// Serves fresh responses from `cache` and stores new ones in it.
     pub fn with_cache(mut self, cache: Cache) -> Self {
         self.cache = Some(cache);
+        self
+    }
+
+    /// Gives up on each request after `timeout` instead of the default 30 s.
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
         self
     }
 
@@ -99,6 +106,7 @@ impl UnifiClient {
             .http
             .post(format!("{}/api/login", self.base_url))
             .json(&json!({ "username": username, "password": password }))
+            .timeout(self.timeout)
             .send()
             .map_err(|e| Error::Unifi(format!("unifi login: {}", describe(&e))))?;
         if resp.status() != StatusCode::OK {
@@ -111,7 +119,7 @@ impl UnifiClient {
     }
 
     fn send(&self, url: &str) -> Result<Response> {
-        let mut req = self.http.get(url);
+        let mut req = self.http.get(url).timeout(self.timeout);
         if let Auth::ApiKey(key) = &self.auth {
             req = req.header("X-API-KEY", key);
         }

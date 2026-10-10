@@ -1,3 +1,6 @@
+use std::path::Path;
+use std::time::Duration;
+
 use clap::Parser;
 use serde::Serialize;
 
@@ -6,6 +9,7 @@ use crate::cli::{
     Cli, ClientsCommand, Command, DevicesCommand, LookupCommand, ModeFilter, OutputFormat,
     PortsCommand, StateFilter, StatusFilter,
 };
+use crate::completion;
 use crate::config;
 use crate::error::{Error, Result};
 use crate::model::{ClientStatus, PortState, VlanMode};
@@ -15,6 +19,7 @@ use crate::unifi::client::UnifiClient;
 
 /// Entry point used by `main.rs`; returns the process exit code.
 pub fn main() -> i32 {
+    completion::handle_request();
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(e) => {
@@ -53,6 +58,9 @@ pub fn run(cli: Cli) -> Result<String> {
     if let Command::Version = cli.command {
         return Ok(format!("unifictl {}\n", env!("CARGO_PKG_VERSION")));
     }
+    if let Command::Completions { shell } = cli.command {
+        return completion::script(shell);
+    }
     let svc = build_service(&cli)?;
     execute(&svc, &cli.command, cli.output)
 }
@@ -60,31 +68,48 @@ pub fn run(cli: Cli) -> Result<String> {
 fn build_service(cli: &Cli) -> Result<Service> {
     #[cfg(feature = "fixtures")]
     if let Some(dir) = &cli.fixtures {
-        let api = crate::unifi::fixtures::FixtureApi::load(dir)?;
-        return Ok(Service::new(
-            Box::new(api),
-            crate::service::DEFAULT_HISTORY_DAYS,
-        ));
+        return fixture_service(dir);
     }
-    let env = |k: &str| std::env::var(k).ok();
-    let path = config::resolve_path(cli.config.as_deref(), &env);
-    let explicit = cli.config.is_some() || env("UNIFICTL_CONFIG").is_some_and(|v| !v.is_empty());
-    let loaded = config::load(&path, explicit, &env)?;
-    for w in &loaded.warnings {
+    let (svc, warnings) = controller_service(cli.config.as_deref(), cli.refresh, None)?;
+    for w in &warnings {
         eprintln!("warning: {w}");
     }
+    Ok(svc)
+}
+
+#[cfg(feature = "fixtures")]
+pub(crate) fn fixture_service(dir: &Path) -> Result<Service> {
+    let api = crate::unifi::fixtures::FixtureApi::load(dir)?;
+    Ok(Service::new(
+        Box::new(api),
+        crate::service::DEFAULT_HISTORY_DAYS,
+    ))
+}
+
+/// A service for the configured controller, and the config warnings for the
+/// caller to show or not. `timeout` overrides the default request timeout.
+pub(crate) fn controller_service(
+    config_flag: Option<&Path>,
+    refresh: bool,
+    timeout: Option<Duration>,
+) -> Result<(Service, Vec<String>)> {
+    let env = |k: &str| std::env::var(k).ok();
+    let path = config::resolve_path(config_flag, &env);
+    let explicit = config_flag.is_some() || env("UNIFICTL_CONFIG").is_some_and(|v| !v.is_empty());
+    let loaded = config::load(&path, explicit, &env)?;
     let mut client = UnifiClient::new(&loaded.config)?;
+    if let Some(timeout) = timeout {
+        client = client.with_timeout(timeout);
+    }
     if !loaded.config.cache_ttl.is_zero() {
         client = client.with_cache(Cache::new(
             config::resolve_cache_dir(&env),
             loaded.config.cache_ttl,
-            !cli.refresh,
+            !refresh,
         ));
     }
-    Ok(Service::new(
-        Box::new(client),
-        loaded.config.client_history_days,
-    ))
+    let svc = Service::new(Box::new(client), loaded.config.client_history_days);
+    Ok((svc, loaded.warnings))
 }
 
 pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat) -> Result<String> {
@@ -152,6 +177,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat) -> Result<String
             LookupCommand::List => emit(out, &svc.list_wans()?, render::wans::list),
             LookupCommand::Get { id } => emit(out, &svc.get_wan(id)?, render::wans::get),
         },
+        Command::Completions { shell } => completion::script(*shell),
         Command::Version => Ok(format!("unifictl {}\n", env!("CARGO_PKG_VERSION"))),
     }
 }

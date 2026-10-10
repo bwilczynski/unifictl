@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap_complete::engine::ArgValueCandidates;
+
+use crate::completion;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -63,22 +66,39 @@ pub enum Command {
         command: PortsCommand,
     },
     /// VLANs (LAN networks)
+    #[command(mut_subcommand("get", |get| get.mut_arg("id", |id| id.add(ArgValueCandidates::new(completion::vlans)))))]
     Vlans {
         #[command(subcommand)]
         command: LookupCommand,
     },
     /// Wireless networks
+    #[command(mut_subcommand("get", |get| get.mut_arg("id", |id| id.add(ArgValueCandidates::new(completion::ssids)))))]
     Ssids {
         #[command(subcommand)]
         command: LookupCommand,
     },
     /// WAN uplinks
+    #[command(mut_subcommand("get", |get| get.mut_arg("id", |id| id.add(ArgValueCandidates::new(completion::wans)))))]
     Wans {
         #[command(subcommand)]
         command: LookupCommand,
     },
+    /// Print a shell completion script
+    Completions {
+        #[arg(value_enum)]
+        shell: Shell,
+    },
     /// Print the unifictl version
     Version,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Shell {
+    Bash,
+    Zsh,
+    Fish,
+    Powershell,
+    Elvish,
 }
 
 #[derive(Debug, Subcommand)]
@@ -88,6 +108,7 @@ pub enum DevicesCommand {
     /// Show one device
     Get {
         /// Device ID, as shown by `devices list`
+        #[arg(add = ArgValueCandidates::new(completion::devices))]
         id: String,
         /// Show all ports (default: active ports only)
         #[arg(long)]
@@ -106,6 +127,7 @@ pub enum ClientsCommand {
     /// Show one client
     Get {
         /// Client ID, as shown by `clients list`
+        #[arg(add = ArgValueCandidates::new(completion::clients))]
         id: String,
     },
 }
@@ -125,7 +147,7 @@ pub enum PortsCommand {
 #[derive(Debug, Args)]
 pub struct PortsListArgs {
     /// Filter by device ID (switch or gateway)
-    #[arg(long)]
+    #[arg(long, add = ArgValueCandidates::new(completion::port_devices))]
     pub device: Option<String>,
     /// Filter by VLAN mode
     #[arg(long, value_enum)]
