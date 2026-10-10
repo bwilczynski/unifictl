@@ -6,66 +6,76 @@ use super::Service;
 use super::common::*;
 use crate::error::Result;
 use crate::model::*;
+use crate::unifi::fetch;
 use crate::unifi::types::{ClientV2, Device, Sta};
 
 impl Service {
-    /// Pass 1: device nodes + uplink edges. With `include_clients`: online
-    /// clients (v1 stas) and offline clients (v2 history) with their edges.
+    /// The device tree; with `include_clients`, every online and offline
+    /// client too.
     pub fn get_topology(&self, include_clients: bool) -> Result<NetworkTopology> {
-        let devices = self.api.devices()?;
-        let by_mac = mac_to_device(&devices);
-        let mut nodes = Vec::new();
-        let mut edges = Vec::new();
-
-        for d in &devices {
-            nodes.push(TopologyNode::Device(TopologyDeviceNode {
-                kind: "device",
-                id: to_kebab(&d.name),
-                name: d.name.clone(),
-                device_type: map_device_type(&d.kind),
-                status: map_device_status(d.state),
-                num_clients: (d.kind == "uap").then_some(d.user_num_sta + d.guest_num_sta),
-            }));
-            let Some(up) = d.uplink.as_ref().filter(|u| !u.uplink_mac.is_empty()) else {
-                continue;
-            };
-            if let Some(upstream) = by_mac.get(&normalize_mac(&up.uplink_mac)) {
-                edges.push(TopologyEdge::Wired(TopologyWiredEdge {
-                    kind: "wired",
-                    source: ConnectionRef::Device(device_ref(d)),
-                    target: device_ref(upstream),
-                    port: up.uplink_remote_port,
-                    link_speed: if up.speed > 0 {
-                        map_link_speed(up.speed)
-                    } else {
-                        None
-                    },
-                }));
-            }
+        if !include_clients {
+            return Ok(build(&self.api.devices()?, &[], &[]));
         }
-
-        if include_clients {
-            let stas = self.api.clients()?;
-            let offline = self.api.offline_clients(self.history_days)?;
-            for sta in &stas {
-                let r = client_ref(sta);
-                nodes.push(client_node(
-                    r.id,
-                    r.name,
-                    sta.is_wired,
-                    ClientStatus::Online,
-                ));
-                edges.extend(online_client_edge(sta, &by_mac));
-            }
-            for c in &offline {
-                let r = client_ref_v2(c);
-                nodes.push(client_node(r.id, r.name, c.is_wired, ClientStatus::Offline));
-                edges.extend(offline_client_edge(c, &by_mac));
-            }
-        }
-
-        Ok(NetworkTopology { nodes, edges })
+        fetch!(
+            devices = self.api.devices(),
+            stas = self.api.clients(),
+            offline = self.api.offline_clients(self.history_days),
+        );
+        Ok(build(&devices, &stas, &offline))
     }
+}
+
+/// Device nodes + uplink edges, then online clients (v1 stas) and offline
+/// clients (v2 history) with their edges.
+fn build(devices: &[Device], stas: &[Sta], offline: &[ClientV2]) -> NetworkTopology {
+    let by_mac = mac_to_device(devices);
+    let mut nodes = Vec::new();
+    let mut edges = Vec::new();
+
+    for d in devices {
+        nodes.push(TopologyNode::Device(TopologyDeviceNode {
+            kind: "device",
+            id: to_kebab(&d.name),
+            name: d.name.clone(),
+            device_type: map_device_type(&d.kind),
+            status: map_device_status(d.state),
+            num_clients: (d.kind == "uap").then_some(d.user_num_sta + d.guest_num_sta),
+        }));
+        let Some(up) = d.uplink.as_ref().filter(|u| !u.uplink_mac.is_empty()) else {
+            continue;
+        };
+        if let Some(upstream) = by_mac.get(&normalize_mac(&up.uplink_mac)) {
+            edges.push(TopologyEdge::Wired(TopologyWiredEdge {
+                kind: "wired",
+                source: ConnectionRef::Device(device_ref(d)),
+                target: device_ref(upstream),
+                port: up.uplink_remote_port,
+                link_speed: if up.speed > 0 {
+                    map_link_speed(up.speed)
+                } else {
+                    None
+                },
+            }));
+        }
+    }
+
+    for sta in stas {
+        let r = client_ref(sta);
+        nodes.push(client_node(
+            r.id,
+            r.name,
+            sta.is_wired,
+            ClientStatus::Online,
+        ));
+        edges.extend(online_client_edge(sta, &by_mac));
+    }
+    for c in offline {
+        let r = client_ref_v2(c);
+        nodes.push(client_node(r.id, r.name, c.is_wired, ClientStatus::Offline));
+        edges.extend(offline_client_edge(c, &by_mac));
+    }
+
+    NetworkTopology { nodes, edges }
 }
 
 fn client_node(id: String, name: String, is_wired: bool, status: ClientStatus) -> TopologyNode {
@@ -180,7 +190,7 @@ mod tests {
                 .count(),
             1
         );
-        for d in &devices {
+        for d in devices {
             match d.id.as_str() {
                 "uap-01" | "uap-02" => assert_eq!(d.num_clients, Some(6), "{}", d.id),
                 _ => assert_eq!(d.num_clients, None, "{}", d.id),

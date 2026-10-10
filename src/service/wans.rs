@@ -4,12 +4,15 @@ use super::Service;
 use super::common::*;
 use crate::error::{Error, Result};
 use crate::model::*;
+use crate::unifi::fetch;
 use crate::unifi::types::{Device, NetworkConf, WanIface};
 
 impl Service {
     pub fn list_wans(&self) -> Result<WanList> {
-        let networks = self.api.network_conf()?;
-        let devices = self.api.devices()?;
+        fetch!(
+            networks = self.api.network_conf(),
+            devices = self.api.devices(),
+        );
         let gw = find_gateway(&devices);
         let items = networks
             .iter()
@@ -30,8 +33,10 @@ impl Service {
     }
 
     pub fn get_wan(&self, id: &str) -> Result<WanDetail> {
-        let networks = self.api.network_conf()?;
-        let devices = self.api.devices()?;
+        fetch!(
+            networks = self.api.network_conf(),
+            devices = self.api.devices(),
+        );
         let gw = find_gateway(&devices);
         let n = networks
             .iter()
