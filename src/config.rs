@@ -105,8 +105,7 @@ pub fn load(path: &Path, explicit: bool, env: &dyn Fn(&str) -> Option<String>) -
     let file = match std::fs::read_to_string(path) {
         Ok(text) => {
             warnings.extend(permission_warning(path));
-            toml::from_str::<FileConfig>(&text)
-                .map_err(|e| Error::Config(format!("{}: {e}", path.display())))?
+            toml::from_str::<FileConfig>(&text).map_err(|e| parse_error(path, &text, &e))?
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound && !explicit => {
             no_file = true;
@@ -200,7 +199,20 @@ fn missing(key: &str, env: &str, path: &Path) -> Error {
     ))
 }
 
-/// Accepts `host`, `host:port` or `https://host[:port]/`.
+/// One line naming the position, never toml's snippet of the file: the
+/// snippet can show a secret, and `config check` output gets pasted around.
+fn parse_error(path: &Path, text: &str, e: &toml::de::Error) -> Error {
+    let at = e.span().map_or(String::new(), |span| {
+        let before = &text[..span.start.min(text.len())];
+        let line = before.matches('\n').count() + 1;
+        let column = before.len() - before.rfind('\n').map_or(0, |i| i + 1) + 1;
+        format!(" at line {line}, column {column}")
+    });
+    Error::Config(format!("{}: {}{at}", path.display(), e.message()))
+}
+
+/// Accepts `host`, `host:port`, `[v6]:port`, a bare v6 literal (bracketed
+/// here, as URLs need) or `https://host[:port]/`.
 pub fn normalize_host(raw: &str) -> Result<String> {
     let host = raw
         .trim()
@@ -210,6 +222,9 @@ pub fn normalize_host(raw: &str) -> Result<String> {
         return Err(Error::Config(format!(
             "host must be a hostname or host:port (the controller is always reached over https), got {raw:?}"
         )));
+    }
+    if host.parse::<std::net::Ipv6Addr>().is_ok() {
+        return Ok(format!("[{host}]"));
     }
     Ok(host.to_string())
 }
@@ -628,5 +643,23 @@ mod tests {
         let p = write_file(&dir, "");
         assert_eq!(file_mode(&p), Some(0o600));
         assert_eq!(file_mode(&dir.path().join("missing")), None);
+    }
+
+    #[test]
+    fn bare_ipv6_host_is_bracketed() {
+        assert_eq!(normalize_host("fd00::1").unwrap(), "[fd00::1]");
+        assert_eq!(normalize_host("::1").unwrap(), "[::1]");
+        assert_eq!(normalize_host("[fd00::1]:8443").unwrap(), "[fd00::1]:8443");
+        assert_eq!(normalize_host("unifi.lan:8443").unwrap(), "unifi.lan:8443");
+    }
+
+    #[test]
+    fn parse_errors_do_not_echo_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = write_file(&dir, "host = \"h\"\napi_key = \"supersecretkey123\n");
+        let err = load(&p, false, &env_of(&[])).unwrap_err().to_string();
+        assert!(!err.contains("supersecret"), "{err}");
+        assert!(!err.contains('\n'), "{err}");
+        assert!(err.contains("line 2"), "{err}");
     }
 }
