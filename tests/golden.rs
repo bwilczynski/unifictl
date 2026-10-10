@@ -1,7 +1,7 @@
 //! Equivalence with the Go implementation: for every case recorded by
 //! tools/golden/generate.sh, unifictl must produce the same JSON data and the
 //! same table rows as hlctl + homelab-api (modulo the documented ID/uri
-//! differences, which the generator already normalized).
+//! differences, client IDs included, which the generator already normalized).
 #![cfg(feature = "fixtures")]
 
 use std::fs;

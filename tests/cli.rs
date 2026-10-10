@@ -150,7 +150,7 @@ mod with_fixtures {
         for args in [
             &["clients", "list"][..],
             &["clients", "list", "--status", "offline"],
-            &["clients", "get", "nas-1-68"],
+            &["clients", "get", "nas-1-0002"],
             &["vlans", "list"],
             &["vlans", "get", "lan-iot"],
             &["ssids", "list"],

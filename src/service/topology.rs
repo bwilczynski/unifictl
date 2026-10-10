@@ -218,33 +218,33 @@ mod tests {
         assert_eq!(t.nodes.len(), 14, "7 devices + 5 online + 2 offline");
         assert_eq!(t.edges.len(), 13, "6 device + 5 online + 2 offline");
 
-        let nas = wired(&t, "nas-1-68");
+        let nas = wired(&t, "nas-1-0002");
         assert_eq!(nas.target.id, "us-8-60w");
         assert_eq!(nas.port, Some(3));
         assert_eq!(nas.link_speed, Some(LinkSpeed::Gbe1));
 
-        let ec = wired(&t, "ec-ee-ee-00-00-04-ec");
+        let ec = wired(&t, "ec-ee-ee-00-00-04-0004");
         assert_eq!(ec.target.id, "uap-01");
         assert_eq!(ec.port, Some(6));
         assert_eq!(ec.link_speed, Some(LinkSpeed::Fe));
 
-        let mb = wireless(&t, "macbook-pro-3c");
+        let mb = wireless(&t, "macbook-pro-0001");
         assert_eq!(mb.target.id, "uap-01");
         assert_eq!(mb.ssid, "homelab");
         assert_eq!(mb.signal_strength, Some(-69));
 
-        let kindle = wireless(&t, "kindle-paperwhite-e0");
+        let kindle = wireless(&t, "kindle-paperwhite-bb04");
         assert_eq!(kindle.ssid, "homelab");
         assert_eq!(kindle.signal_strength, None);
 
-        let host = wired(&t, "host-02-aa");
+        let host = wired(&t, "host-02-bb05");
         assert_eq!(host.target.id, "switch-flex-mini");
         assert_eq!(host.port, None);
 
         for n in &t.nodes {
             if let TopologyNode::Client(c) = n {
                 let want = match c.id.as_str() {
-                    "kindle-paperwhite-e0" | "host-02-aa" => ClientStatus::Offline,
+                    "kindle-paperwhite-bb04" | "host-02-bb05" => ClientStatus::Offline,
                     _ => ClientStatus::Online,
                 };
                 assert_eq!(c.status, want, "{}", c.id);

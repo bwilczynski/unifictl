@@ -1,5 +1,5 @@
 FIELD       VALUE
-ID          iphone-a4
+ID          iphone-0003
 NAME        iPhone
 MAC         a4:ee:ee:00:00:03
 IP          192.168.10.45

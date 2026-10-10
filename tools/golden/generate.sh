@@ -2,7 +2,8 @@
 # Regenerates tests/golden from the Go implementation: a fixture-backed
 # homelab-api network server plus hlctl's network commands. Output is
 # normalized to unifictl's intentional differences (no `uri`, no `unifi.` ID
-# prefix). Run via `mise run golden`; commit the result.
+# prefix, client IDs ending in the last four MAC hex digits rather than the
+# first two). Run via `mise run golden`; commit the result.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -55,6 +56,29 @@ strip_json() {
 }
 strip_text() { sed 's/unifi\.//g'; }
 
+# 4. Client IDs: Go suffixes the first two MAC hex digits (`nas-1-68`),
+#    unifictl the last four (`nas-1-0002`). Map one to the other, computed
+#    from the fixtures; refuse fixtures whose Go IDs are ambiguous.
+jq -r -s '
+  def kebab: ascii_downcase | gsub("[^a-z0-9]+"; "-") | gsub("^-+|-+$"; "");
+  [.[].data[]
+   | (.mac | ascii_downcase | gsub(":"; "")) as $hex
+   | ([.name, .hostname, .mac] | map(select(. != null and . != "")) | first | kebab) as $k
+   | [$k + "-" + $hex[0:2], $k + "-" + $hex[-4:]]]
+  | unique
+  | if (map(.[0]) | unique | length) != length
+    then error("two fixture clients share a Go-style ID; the ID map would be ambiguous")
+    else .[] | @tsv end
+' "$ROOT"/tests/fixtures/unifi-{clients,v2-active,v2-history}.json >"$WORK/client-ids.tsv"
+map_ids() {
+  perl -e '
+    open my $f, "<", shift or die $!;
+    my %m = map { chomp; split /\t/ } <$f>;
+    my $re = join "|", map quotemeta, sort { length $b <=> length $a } keys %m;
+    while (<STDIN>) { s/(?<![\w-])($re)(?![\w-])/$m{$1}/g; print }
+  ' "$WORK/client-ids.tsv"
+}
+
 rm -rf "$OUT"
 mkdir -p "$OUT"
 : >"$OUT/cases.txt"
@@ -64,14 +88,14 @@ case_() {
   local name="$1"
   shift
   local args
-  args="$(printf '%s ' "$@" | sed 's/unifi\.//g; s/ $//')"
+  args="$(printf '%s ' "$@" | sed 's/unifi\.//g; s/ $//' | map_ids)"
   printf '%s\t%s\n' "$name" "$args" >>"$OUT/cases.txt"
   if ! hl -o json "$@" >"$WORK/out.json" 2>"$WORK/err.txt"; then
     cp "$WORK/err.txt" "$OUT/$name.err"
     return
   fi
-  strip_json <"$WORK/out.json" >"$OUT/$name.json"
-  hl "$@" | strip_text >"$OUT/$name.txt"
+  strip_json <"$WORK/out.json" | map_ids >"$OUT/$name.json"
+  hl "$@" | strip_text | map_ids >"$OUT/$name.txt"
 }
 
 ids() { hl -o json "$@" | jq -r '.items[].id'; }
@@ -89,7 +113,7 @@ case_ clients-list-offline clients list --status offline
 client_ids="$( (ids clients list
   hl -o json topology --include-clients | jq -r '.nodes[] | select(.kind == "client") | .id') | sort -u)"
 for id in $client_ids; do
-  case_ "clients-get-${id#unifi.}" clients get "$id"
+  case_ "clients-get-$(map_ids <<<"${id#unifi.}")" clients get "$id"
 done
 
 case_ topology topology

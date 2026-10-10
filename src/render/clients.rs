@@ -107,7 +107,7 @@ mod tests {
 
     #[test]
     fn wired_detail_fields() {
-        let out = get(&svc().get_client("nas-1-68").unwrap());
+        let out = get(&svc().get_client("nas-1-0002").unwrap());
         let field = |name: &str| {
             out.lines()
                 .find(|l| l.starts_with(name))
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn offline_wireless_detail_omits_signal_and_uptime() {
-        let out = get(&svc().get_client("kindle-paperwhite-e0").unwrap());
+        let out = get(&svc().get_client("kindle-paperwhite-bb04").unwrap());
         assert!(
             out.lines()
                 .any(|l| l.starts_with("AP") && l.ends_with("UAP-01"))

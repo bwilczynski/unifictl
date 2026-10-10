@@ -33,18 +33,18 @@ pub(crate) fn normalize_mac(mac: &str) -> String {
     mac.to_lowercase()
 }
 
-/// First two hex chars of the MAC (colons stripped); falls back to the first
-/// two chars of `fallback_id` (dashes stripped), then `"xx"`.
-pub(crate) fn mac_hex_prefix(mac: &str, fallback_id: &str) -> String {
-    let hex: String = mac.chars().filter(|&c| c != ':').collect();
-    if hex.chars().count() >= 2 {
-        return hex.chars().take(2).collect();
-    }
-    let id: String = fallback_id.chars().filter(|&c| c != '-').collect();
-    if id.chars().count() >= 2 {
-        return id.chars().take(2).collect();
-    }
-    "xx".to_string()
+/// Last four hex chars of the MAC (colons stripped); falls back to the last
+/// four chars of `fallback_id` (dashes stripped), then `"xxxx"`. The end of
+/// the MAC rather than the start: the first byte is shared by every device
+/// from one vendor, so same-named devices collided.
+pub(crate) fn mac_hex_suffix(mac: &str, fallback_id: &str) -> String {
+    let last4 = |s: String| {
+        let chars: Vec<char> = s.chars().collect();
+        (chars.len() >= 4).then(|| chars[chars.len() - 4..].iter().collect::<String>())
+    };
+    last4(mac.chars().filter(|&c| c != ':').collect())
+        .or_else(|| last4(fallback_id.chars().filter(|&c| c != '-').collect()))
+        .unwrap_or_else(|| "xxxx".to_string())
 }
 
 fn first_non_empty(candidates: [Option<&String>; 2], fallback: &str) -> String {
@@ -65,21 +65,21 @@ pub(crate) fn client_name_v2(c: &ClientV2) -> String {
     first_non_empty([c.name.as_ref(), c.hostname.as_ref()], &c.mac)
 }
 
-/// Client ID for a v1 sta: `{kebab-name}-{mac-prefix}`.
+/// Client ID for a v1 sta: `{kebab-name}-{mac-suffix}`.
 pub(crate) fn client_suffix(sta: &Sta) -> String {
     format!(
         "{}-{}",
         to_kebab(&client_name(sta)),
-        mac_hex_prefix(&normalize_mac(&sta.mac), "")
+        mac_hex_suffix(&normalize_mac(&sta.mac), "")
     )
 }
 
-/// Client ID for a v2 client: `{kebab-name}-{mac-prefix}` (falls back to the v2 id).
+/// Client ID for a v2 client: `{kebab-name}-{mac-suffix}` (falls back to the v2 id).
 pub(crate) fn client_id_v2(c: &ClientV2) -> String {
     format!(
         "{}-{}",
         to_kebab(&client_name_v2(c)),
-        mac_hex_prefix(&normalize_mac(&c.mac), &c.id)
+        mac_hex_suffix(&normalize_mac(&c.mac), &c.id)
     )
 }
 
@@ -203,10 +203,23 @@ mod tests {
     }
 
     #[test]
-    fn mac_hex_prefix_fallbacks() {
-        assert_eq!(mac_hex_prefix("3c:22:fb:aa:bb:01", ""), "3c");
-        assert_eq!(mac_hex_prefix("", "e1-23"), "e1");
-        assert_eq!(mac_hex_prefix("", ""), "xx");
+    fn mac_hex_suffix_fallbacks() {
+        assert_eq!(mac_hex_suffix("3c:22:fb:aa:bb:01", ""), "bb01");
+        assert_eq!(mac_hex_suffix("", "e1-23-45"), "2345");
+        assert_eq!(mac_hex_suffix("", "e1"), "xxxx");
+        assert_eq!(mac_hex_suffix("", ""), "xxxx");
+    }
+
+    #[test]
+    fn same_name_same_vendor_clients_get_distinct_ids() {
+        let sta = |mac: &str| Sta {
+            name: Some("Mac Mini".into()),
+            mac: mac.into(),
+            ..Default::default()
+        };
+        let a = client_suffix(&sta("f0:18:98:b0:53:53"));
+        let b = client_suffix(&sta("f0:18:98:ee:68:68"));
+        assert_eq!((a.as_str(), b.as_str()), ("mac-mini-5353", "mac-mini-6868"));
     }
 
     #[test]
@@ -216,7 +229,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(client_name(&sta), "ec:ee:ee:00:00:04");
-        assert_eq!(client_suffix(&sta), "ec-ee-ee-00-00-04-ec");
+        assert_eq!(client_suffix(&sta), "ec-ee-ee-00-00-04-0004");
         sta.hostname = Some("nas-1".into());
         assert_eq!(client_name(&sta), "nas-1");
         sta.name = Some(String::new());

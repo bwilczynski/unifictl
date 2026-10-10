@@ -1,3 +1,3 @@
 ID                          NAME               MAC                IP             STATUS   CONNECTION
-kindle-paperwhite-e0  Kindle Paperwhite  e0:f7:28:aa:bb:04  192.168.10.37  offline  wireless
-host-02-aa            host-02            aa:bb:cc:aa:bb:05  192.168.10.42  offline  wired
+kindle-paperwhite-bb04  Kindle Paperwhite  e0:f7:28:aa:bb:04  192.168.10.37  offline  wireless
+host-02-bb05            host-02            aa:bb:cc:aa:bb:05  192.168.10.42  offline  wired

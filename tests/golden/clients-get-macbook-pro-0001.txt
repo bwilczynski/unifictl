@@ -1,5 +1,5 @@
 FIELD       VALUE
-ID          macbook-pro-3c
+ID          macbook-pro-0001
 NAME        MacBook Pro
 MAC         3c:ee:ee:00:00:01
 IP          192.168.10.67

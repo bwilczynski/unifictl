@@ -1,5 +1,5 @@
 FIELD       VALUE
-ID          nintendo-switch-11
+ID          nintendo-switch-5503
 NAME        Nintendo Switch
 MAC         11:22:33:44:55:03
 IP          192.168.20.7

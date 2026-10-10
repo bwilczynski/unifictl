@@ -17,14 +17,14 @@ devices-get-missing	devices get missing
 clients-list	clients list
 clients-list-online	clients list --status online
 clients-list-offline	clients list --status offline
-clients-get-ec-ee-ee-00-00-04-ec	clients get ec-ee-ee-00-00-04-ec
-clients-get-host-02-aa	clients get host-02-aa
-clients-get-iphone-a4	clients get iphone-a4
-clients-get-kindle-paperwhite-e0	clients get kindle-paperwhite-e0
-clients-get-macbook-pro-3c	clients get macbook-pro-3c
-clients-get-nas-1-68	clients get nas-1-68
-clients-get-nintendo-switch-11	clients get nintendo-switch-11
-clients-get-sonos-one-sl-l-c4	clients get sonos-one-sl-l-c4
+clients-get-ec-ee-ee-00-00-04-0004	clients get ec-ee-ee-00-00-04-0004
+clients-get-host-02-bb05	clients get host-02-bb05
+clients-get-iphone-0003	clients get iphone-0003
+clients-get-kindle-paperwhite-bb04	clients get kindle-paperwhite-bb04
+clients-get-macbook-pro-0001	clients get macbook-pro-0001
+clients-get-nas-1-0002	clients get nas-1-0002
+clients-get-nintendo-switch-5503	clients get nintendo-switch-5503
+clients-get-sonos-one-sl-l-bb03	clients get sonos-one-sl-l-bb03
 topology	topology
 topology-clients	topology --include-clients
 topology-wireless	topology --include-wireless
