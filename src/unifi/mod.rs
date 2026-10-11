@@ -7,7 +7,7 @@ pub mod fixtures;
 use std::thread::ScopedJoinHandle;
 
 use crate::error::Result;
-use types::{ClientV2, Device, NetworkConf, Sta, WlanConf};
+use types::{ClientV2, Device, LogQuery, NetworkConf, Sta, SystemLogPage, WlanConf};
 
 /// Runs independent controller reads concurrently, so a command waits for
 /// the slowest endpoint rather than the sum of all of them, and binds each
@@ -45,6 +45,8 @@ pub trait UnifiApi: Sync {
     fn offline_clients(&self, history_days: i64) -> Result<Vec<ClientV2>>;
     fn wlan_conf(&self) -> Result<Vec<WlanConf>>;
     fn network_conf(&self) -> Result<Vec<NetworkConf>>;
+    /// One page of the system log. Never cached.
+    fn system_log(&self, query: &LogQuery) -> Result<SystemLogPage>;
 
     /// Active followed by offline clients (homelab-api `GetAllClients`).
     fn all_clients(&self, history_days: i64) -> Result<Vec<ClientV2>> {

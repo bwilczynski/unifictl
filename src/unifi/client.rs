@@ -6,11 +6,14 @@ use std::time::Duration;
 
 use reqwest::StatusCode;
 use reqwest::blocking::{Client, Response};
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
 use super::UnifiApi;
-use super::types::{ClientV2, Device, Envelope, NetworkConf, Site, Sta, WlanConf};
+use super::types::{
+    ClientV2, Device, Envelope, LogQuery, NetworkConf, Site, Sta, SystemLogPage, WlanConf,
+};
 use crate::cache::Cache;
 use crate::config::{Auth, Config};
 use crate::error::{Error, Result};
@@ -189,6 +192,14 @@ impl UnifiClient {
         req.send()
     }
 
+    fn post_request(&self, url: &str, body: &impl Serialize) -> reqwest::Result<Response> {
+        let mut req = self.http.post(url).json(body).timeout(self.timeout);
+        if let Auth::ApiKey(key) = &self.auth {
+            req = req.header("X-API-KEY", key);
+        }
+        req.send()
+    }
+
     fn login(&self) -> Result<()> {
         let Auth::Session { username, password } = &self.auth else {
             return Ok(());
@@ -196,18 +207,18 @@ impl UnifiClient {
         let resp = self
             .post_login(username, password)
             .map_err(|e| Error::Unifi(format!("unifi login: {}", describe(&e))))?;
-        if resp.status() != StatusCode::OK {
-            return Err(Error::Unifi(format!(
-                "unifi login: status {}",
-                resp.status().as_u16()
-            )));
+        let status = resp.status();
+        if status != StatusCode::OK {
+            let msg = format!("unifi login: status {}", status.as_u16());
+            // Only a rejection is final; 429 and 5xx may pass on a retry.
+            return Err(match status {
+                StatusCode::BAD_REQUEST | StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                    Error::Auth(msg)
+                }
+                _ => Error::Unifi(msg),
+            });
         }
         Ok(())
-    }
-
-    fn send(&self, url: &str) -> Result<Response> {
-        self.request(url)
-            .map_err(|e| Error::Unifi(format!("unifi request: {}", describe(&e))))
     }
 
     /// GET `{prefix}{path}`, from the cache when fresh. Only responses that
@@ -227,22 +238,28 @@ impl UnifiClient {
         Ok(value)
     }
 
-    /// GET `url` and return the body; in session mode re-authenticates once on 401.
+    /// GET `url` and return the body; see [`Self::fetch_with`].
     fn fetch(&self, url: &str) -> Result<String> {
+        self.fetch_with(|| self.request(url))
+    }
+
+    /// Sends a request with `send` and returns the body; in session mode
+    /// re-authenticates once on 401. Authentication failures are `Error::Auth`.
+    fn fetch_with(&self, send: impl Fn() -> reqwest::Result<Response>) -> Result<String> {
+        let send = || send().map_err(|e| Error::Unifi(format!("unifi request: {}", describe(&e))));
         let session = matches!(self.auth, Auth::Session { .. });
         if session {
             self.ensure_login(false)?;
         }
-        let mut resp = self.send(url)?;
+        let mut resp = send()?;
         if resp.status() == StatusCode::UNAUTHORIZED {
             if !session {
-                return Err(Error::Unifi("unifi request: invalid API key (401)".into()));
+                return Err(Error::Auth("unifi request: invalid API key (401)".into()));
             }
-            self.ensure_login(true)
-                .map_err(|e| Error::Unifi(format!("unifi re-auth: {e}")))?;
-            resp = self.send(url)?;
+            self.ensure_login(true).map_err(reauth_error)?;
+            resp = send()?;
             if resp.status() == StatusCode::UNAUTHORIZED {
-                return Err(Error::Unifi(
+                return Err(Error::Auth(
                     "unifi request: unauthorized after re-auth".into(),
                 ));
             }
@@ -298,6 +315,25 @@ impl UnifiApi for UnifiClient {
 
     fn network_conf(&self) -> Result<Vec<NetworkConf>> {
         self.get_data("rest/networkconf")
+    }
+
+    fn system_log(&self, query: &LogQuery) -> Result<SystemLogPage> {
+        let url = format!(
+            "{}{}/v2/api/site/{}/system-log/all",
+            self.base_url,
+            self.prefix(),
+            self.site
+        );
+        let body = self.fetch_with(|| self.post_request(&url, query))?;
+        serde_json::from_str(&body).map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))
+    }
+}
+
+/// A failed re-login after a 401, keeping whether it was refused or unreachable.
+fn reauth_error(e: Error) -> Error {
+    match e {
+        Error::Auth(m) => Error::Auth(format!("unifi re-auth: {m}")),
+        other => Error::Unifi(format!("unifi re-auth: {other}")),
     }
 }
 
@@ -357,6 +393,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::unifi::types::LogQuery;
 
     fn api_key_client(server: &MockServer) -> UnifiClient {
         UnifiClient::with_base_url(
@@ -567,6 +604,35 @@ mod tests {
         assert_eq!(
             api_key_client(&server).devices().unwrap_err().to_string(),
             "unifi request: status 500"
+        );
+    }
+
+    #[test]
+    fn unavailable_login_is_not_an_auth_error() {
+        for status in [429, 502, 503] {
+            let server = MockServer::start();
+            server.mock(|when, then| {
+                when.method(POST).path("/api/login");
+                then.status(status);
+            });
+            let err = session_client(&server)
+                .system_log(&LogQuery::default())
+                .unwrap_err();
+            assert!(matches!(err, Error::Unifi(_)), "{status}: {err:?}");
+            assert_eq!(err.to_string(), format!("unifi login: status {status}"));
+        }
+    }
+
+    #[test]
+    fn reauth_failure_keeps_its_kind() {
+        let auth = reauth_error(Error::Auth("unifi login: status 401".into()));
+        assert!(matches!(auth, Error::Auth(_)));
+        assert_eq!(auth.to_string(), "unifi re-auth: unifi login: status 401");
+        let down = reauth_error(Error::Unifi("unifi login: connection refused".into()));
+        assert!(matches!(down, Error::Unifi(_)));
+        assert_eq!(
+            down.to_string(),
+            "unifi re-auth: unifi login: connection refused"
         );
     }
 
@@ -812,5 +878,147 @@ mod tests {
             classify_chain("boom", false, false),
             TransportError::Other(_)
         ));
+    }
+
+    fn log_query() -> LogQuery {
+        LogQuery {
+            timestamp_from: Some(1000),
+            timestamp_to: Some(2000),
+            severities: vec!["HIGH", "VERY_HIGH"],
+            categories: vec!["SECURITY"],
+            page_size: 1000,
+            page_number: 0,
+        }
+    }
+
+    #[test]
+    fn system_log_posts_query_and_is_never_cached() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(POST)
+                .path("/proxy/network/v2/api/site/default/system-log/all")
+                .header("X-API-KEY", "k")
+                .json_body(json!({
+                    "timestampFrom": 1000,
+                    "timestampTo": 2000,
+                    "severities": ["HIGH", "VERY_HIGH"],
+                    "categories": ["SECURITY"],
+                    "pageSize": 1000,
+                    "pageNumber": 0
+                }));
+            then.status(200).json_body(json!({
+                "data": [{
+                    "id": "e1",
+                    "timestamp": 1500,
+                    "severity": "HIGH",
+                    "parameters": {
+                        "PORT": {"id": 5, "name": 5},
+                        "EMPTY": {"id": "x", "name": ""},
+                        "GONE": null
+                    }
+                }],
+                "page_number": 0,
+                "total_element_count": 1,
+                "total_page_count": 1
+            }));
+        });
+        let c = api_key_client(&server).with_cache(cache_in(&dir, true));
+        for _ in 0..2 {
+            let page = c.system_log(&log_query()).unwrap();
+            assert_eq!(page.total_page_count, 1);
+            let e = &page.data[0];
+            assert_eq!((e.id.as_str(), e.timestamp), ("e1", 1500));
+            assert_eq!(e.parameters["PORT"].id().as_deref(), Some("5"));
+            assert_eq!(e.parameters["PORT"].name().as_deref(), Some("5"));
+            assert_eq!(e.parameters["EMPTY"].name(), None);
+            assert_eq!(e.parameters["GONE"].id(), None);
+        }
+        m.assert_calls(2);
+    }
+
+    #[test]
+    fn system_log_omits_empty_filters() {
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(POST)
+                .path("/proxy/network/v2/api/site/default/system-log/all")
+                .json_body(json!({"pageSize": 50, "pageNumber": 3}));
+            then.status(200)
+                .json_body(json!({"data": [], "total_page_count": 0}));
+        });
+        let q = LogQuery {
+            page_size: 50,
+            page_number: 3,
+            ..Default::default()
+        };
+        assert!(
+            api_key_client(&server)
+                .system_log(&q)
+                .unwrap()
+                .data
+                .is_empty()
+        );
+        m.assert();
+    }
+
+    #[test]
+    fn system_log_session_relogs_once_then_is_auth_error() {
+        let server = MockServer::start();
+        let login = server.mock(|when, then| {
+            when.method(POST).path("/api/login");
+            then.status(200).json_body(json!({}));
+        });
+        let log = server.mock(|when, then| {
+            when.method(POST).path("/v2/api/site/lab/system-log/all");
+            then.status(401);
+        });
+        let err = session_client(&server)
+            .system_log(&log_query())
+            .unwrap_err();
+        assert!(matches!(err, Error::Auth(_)), "{err:?}");
+        assert_eq!(err.to_string(), "unifi request: unauthorized after re-auth");
+        login.assert_calls(2);
+        log.assert_calls(2);
+    }
+
+    #[test]
+    fn invalid_api_key_and_refused_login_are_auth_errors() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(POST)
+                .path("/proxy/network/v2/api/site/default/system-log/all");
+            then.status(401);
+        });
+        let err = api_key_client(&server)
+            .system_log(&log_query())
+            .unwrap_err();
+        assert!(matches!(err, Error::Auth(_)), "{err:?}");
+
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(POST).path("/api/login");
+            then.status(403);
+        });
+        let err = session_client(&server)
+            .system_log(&log_query())
+            .unwrap_err();
+        assert!(matches!(err, Error::Auth(_)), "{err:?}");
+        assert_eq!(err.to_string(), "unifi login: status 403");
+    }
+
+    #[test]
+    fn system_log_server_error_is_not_auth() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(POST)
+                .path("/proxy/network/v2/api/site/default/system-log/all");
+            then.status(503);
+        });
+        let err = api_key_client(&server)
+            .system_log(&log_query())
+            .unwrap_err();
+        assert!(matches!(err, Error::Unifi(_)), "{err:?}");
+        assert_eq!(err.to_string(), "unifi request: status 503");
     }
 }

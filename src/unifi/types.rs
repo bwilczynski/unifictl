@@ -3,7 +3,9 @@
 //! into a zero value and ignores missing keys; every non-`Option` field here
 //! uses `nd` + container `default` to behave the same way.
 
-use serde::{Deserialize, Deserializer};
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 fn nd<'de, D, T>(d: D) -> Result<T, D::Error>
@@ -289,6 +291,87 @@ pub struct NetworkConf {
     pub wan_dns1: String,
     #[serde(deserialize_with = "nd")]
     pub wan_dns2: String,
+}
+
+/// One page of `POST /v2/api/site/{site}/system-log/all`, newest first.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct SystemLogPage {
+    #[serde(deserialize_with = "nd")]
+    pub data: Vec<SystemLogEntry>,
+    #[serde(deserialize_with = "nd")]
+    pub total_page_count: i64,
+}
+
+/// A system log entry. `message_raw` and `title_raw` are templates whose
+/// `{KEY}` placeholders name entries of `parameters`.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct SystemLogEntry {
+    #[serde(deserialize_with = "nd")]
+    pub id: String,
+    /// Epoch milliseconds.
+    #[serde(deserialize_with = "nd")]
+    pub timestamp: i64,
+    /// LOW, MEDIUM, HIGH, VERY_HIGH, WARNING, INFO
+    #[serde(deserialize_with = "nd")]
+    pub severity: String,
+    #[serde(deserialize_with = "nd")]
+    pub category: String,
+    #[serde(deserialize_with = "nd")]
+    pub subcategory: String,
+    #[serde(deserialize_with = "nd")]
+    pub event: String,
+    #[serde(deserialize_with = "nd")]
+    pub title_raw: String,
+    #[serde(deserialize_with = "nd")]
+    pub message_raw: String,
+    #[serde(deserialize_with = "nd")]
+    pub parameters: BTreeMap<String, LogParam>,
+}
+
+/// A template parameter, kept as raw JSON: the controller sends `id` and
+/// `name` as strings or numbers, and sometimes a whole parameter as `null`.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(transparent)]
+pub struct LogParam(Value);
+
+impl LogParam {
+    /// Usually a MAC for devices and clients.
+    pub fn id(&self) -> Option<String> {
+        scalar(self.0.get("id"))
+    }
+
+    /// The display value; `None` when missing, `null` or empty.
+    pub fn name(&self) -> Option<String> {
+        scalar(self.0.get("name"))
+    }
+}
+
+fn scalar(v: Option<&Value>) -> Option<String> {
+    match v? {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+/// Request body for the system log. Omitted times mean the whole retained
+/// log; empty filters are left out.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogQuery {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp_from: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp_to: Option<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub severities: Vec<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<&'static str>,
+    pub page_size: i64,
+    pub page_number: i64,
 }
 
 #[cfg(test)]
