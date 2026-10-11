@@ -15,7 +15,11 @@
       "uptime": 27075,
       "essid": "homelab",
       "signal": -69,
-      "last_seen": 0
+      "last_seen": 1791712800,
+      "wifi_experience_score": 92,
+      "tx_rate": 866700,
+      "tx_bytes-r": 524288.0,
+      "rx_bytes-r": 10240.0
     },
     {
       "id": "aabbcc000002",
@@ -27,12 +31,16 @@
       "last_ip": "",
       "is_wired": true,
       "status": "online",
-      "last_uplink_name": "Switch Living Room",
+      "last_uplink_name": "US 8 60W",
       "last_uplink_mac": "aa:bb:cc:dd:06:01",
       "uptime": 1024199,
       "essid": null,
       "signal": null,
-      "last_seen": 0
+      "last_seen": 1791712800,
+      "sw_port": 3,
+      "wired_rate_mbps": 1000,
+      "tx_bytes-r": 2048.0,
+      "rx_bytes-r": 1048576.0
     },
     {
       "id": "aabbcc000003",
@@ -48,8 +56,12 @@
       "last_uplink_mac": "aa:bb:cc:dd:04:01",
       "uptime": 86400,
       "essid": "homelab-iot",
-      "signal": -58,
-      "last_seen": 0
+      "signal": -80,
+      "last_seen": 1791712800,
+      "wifi_experience_score": 45,
+      "tx_rate": 72200,
+      "tx_bytes-r": 0.0,
+      "rx_bytes-r": 0.0
     }
   ]
 }

@@ -235,6 +235,19 @@ pub struct ClientV2 {
     pub last_seen: i64,
     #[serde(deserialize_with = "nd")]
     pub last_uplink_mac: String,
+    /// 0–100, wireless clients only.
+    pub wifi_experience_score: Option<f64>,
+    /// Wi-Fi PHY rate, AP → client, kbps.
+    pub tx_rate: Option<f64>,
+    pub wired_rate_mbps: Option<i64>,
+    /// Network-side counters: `tx` is what the network sent to the client.
+    #[serde(rename = "rx_bytes-r")]
+    pub rx_bytes_r: Option<f64>,
+    #[serde(rename = "tx_bytes-r")]
+    pub tx_bytes_r: Option<f64>,
+    /// Upstream switch port (active), and the last one (history).
+    pub sw_port: Option<i64>,
+    pub last_uplink_remote_port: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -522,5 +535,20 @@ mod tests {
         assert_eq!(d.satisfaction, None);
         let d: Device = serde_json::from_str(r#"{"satisfaction": 93}"#).unwrap();
         assert_eq!(d.satisfaction, Some(93));
+    }
+
+    #[test]
+    fn client_v2_tolerates_floats_and_nulls() {
+        let c: ClientV2 = serde_json::from_str(
+            r#"{"tx_rate": 866.7, "rx_bytes-r": 12.5, "tx_bytes-r": null,
+                "wifi_experience_score": null, "sw_port": null}"#,
+        )
+        .unwrap();
+        assert_eq!(c.tx_rate, Some(866.7));
+        assert_eq!(c.rx_bytes_r, Some(12.5));
+        assert_eq!(c.tx_bytes_r, None);
+        assert_eq!(c.wifi_experience_score, None);
+        let c: ClientV2 = serde_json::from_str(r#"{"wifi_experience_score": 91.0}"#).unwrap();
+        assert_eq!(c.wifi_experience_score, Some(91.0));
     }
 }

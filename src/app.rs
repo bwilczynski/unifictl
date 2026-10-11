@@ -371,13 +371,13 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
             }),
         },
         Command::Clients { command } => match command {
-            ClientsCommand::List { status } => {
+            ClientsCommand::List { status, wide } => {
                 let status = status.map(|s| match s {
                     StatusFilter::Online => ClientStatus::Online,
                     StatusFilter::Offline => ClientStatus::Offline,
                 });
                 emit_list(out, &svc.list_clients(status)?, |l| {
-                    render::clients::list(l, color)
+                    render::clients::list(l, *wide, color)
                 })
             }
             ClientsCommand::Get { id } => emit(out, &svc.get_client(id)?, |c| {
