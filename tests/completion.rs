@@ -108,4 +108,10 @@ mod with_fixtures {
         assert_eq!(ids(&["ssids", "get", ""]), ["home-wifi-iot", "home-wifi"]);
         assert_eq!(ids(&["wans", "get", ""]), ["internet-1", "internet-2"]);
     }
+
+    #[test]
+    fn logs_device_and_client_complete() {
+        assert_eq!(ids(&["logs", "--device", "uap"]), ["uap-02", "uap-01"]);
+        assert_eq!(ids(&["logs", "--client", "mac"]), ["macbook-pro-0001"]);
+    }
 }

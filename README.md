@@ -1,8 +1,8 @@
 # unifictl
 
 A command-line client for UniFi network controllers: devices, clients, ports,
-VLANs, SSIDs, WANs and a topology tree, straight from the controller with no
-server in between.
+VLANs, SSIDs, WANs, a topology tree and the system log, straight from the
+controller with no server in between.
 
 ![unifictl topology --include-wireless: a UCG-Fiber gateway, a core switch, two access points with their wireless clients and a Flex switch with wired clients](docs/demo/topology.png)
 
@@ -84,6 +84,7 @@ unifictl clients list [--status online|offline] | get <id>
 unifictl topology [--include-clients] [--include-wireless]
 unifictl ports list [--device ID] [--mode trunk|access] [--state up|down|disabled | --all-ports] [--vlan N] [--wide]
 unifictl vlans|ssids|wans list | get <id>
+unifictl logs [-n N] [-S WHEN] [-U WHEN] [-p LEVEL] [-r] [-f] [--category CAT] [--device ID] [--client ID]
 ```
 
 Every command takes `-o json` and `--refresh`. `devices`, `clients`, `vlans`, `ssids` and `wans list`
@@ -100,11 +101,38 @@ config.
 
 ![unifictl devices list, then unifictl devices get switch-core --all-ports](docs/demo/devices.gif)
 
+### Logs
+
+`unifictl logs` reads the controller's system log the way `journalctl` reads
+the journal: the 50 most recent entries, oldest first, one per line.
+
+```sh
+$ unifictl logs -p high --since yesterday
+Oct 10 23:33:32 security: A network intrusion attempt from 192.168.10.67 to 198.51.100.7 has been detected.
+Oct 11 08:12:40 internet-and-wan: Internet connection WAN1 ExampleISP on port 5 is down.
+```
+
+- `-n N` shows the last N entries; `-S`/`--since` and `-U`/`--until` take
+  `now`, `today`, `yesterday`, `-2h`, `"2h ago"` or `YYYY-MM-DD [HH:MM[:SS]]`
+  in local time, and without `-n` show the whole window.
+- `-p low|medium|high|very-high` keeps that severity and above; on a terminal
+  the message is coloured by severity.
+- `--category` (`security`, `client-devices`, `internet-and-wan`, `audit`, …),
+  `--device ID` and `--client ID` narrow it down. Repeating a flag widens the
+  match; different flags narrow it, so `--client iphone-0c01 --device ap-office`
+  shows that phone's roams to and from AP-Office. IDs complete on TAB.
+- `-r` puts the newest first; `-f` keeps running and prints new entries as they
+  arrive (checking every 5 seconds).
+- `-o json` prints one JSON object per line, with the device and client IDs
+  each entry mentions, so `jq` can feed them back into `devices get` or
+  `clients get`.
+
 ## Shell completions
 
 `unifictl completions <bash|zsh|fish|powershell|elvish>` prints a script that
 completes subcommands, flags and IDs: `devices get <TAB>`, `clients get
-<TAB>`, `vlans|ssids|wans get <TAB>` and `ports list --device <TAB>`. Load it
+<TAB>`, `vlans|ssids|wans get <TAB>`, `ports list --device <TAB>` and `logs
+--device|--client <TAB>`. Load it
 from your shell's startup file:
 
 ```sh

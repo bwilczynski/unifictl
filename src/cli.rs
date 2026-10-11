@@ -97,6 +97,8 @@ pub enum Command {
         #[command(subcommand)]
         command: LookupCommand,
     },
+    /// The controller's system log, like journalctl
+    Logs(LogsArgs),
     /// Create the config file, or check it and the controller connection
     Config {
         #[command(subcommand)]
@@ -196,6 +198,83 @@ pub enum StateFilter {
     Up,
     Down,
     Disabled,
+}
+
+#[derive(Debug, Args)]
+pub struct LogsArgs {
+    /// Show the N most recent entries [default: 50; all with --since/--until; else 10 with --follow]
+    #[arg(short = 'n', long, value_name = "N")]
+    pub lines: Option<usize>,
+    /// Entries at or after WHEN: now, today, yesterday, -2h, "2h ago", YYYY-MM-DD [HH:MM[:SS]]
+    #[arg(short = 'S', long, value_name = "WHEN", allow_hyphen_values = true)]
+    pub since: Option<String>,
+    /// Entries at or before WHEN (same forms as --since)
+    #[arg(
+        short = 'U',
+        long,
+        value_name = "WHEN",
+        allow_hyphen_values = true,
+        conflicts_with = "follow"
+    )]
+    pub until: Option<String>,
+    /// Only entries of this severity and above
+    #[arg(short = 'p', long, value_enum, value_name = "LEVEL")]
+    pub priority: Option<PriorityArg>,
+    /// Newest entries first
+    #[arg(short = 'r', long, conflicts_with = "follow")]
+    pub reverse: bool,
+    /// Keep running and print new entries as they arrive
+    #[arg(short = 'f', long)]
+    pub follow: bool,
+    /// Only these categories (repeatable or comma-separated)
+    #[arg(long, value_enum, value_delimiter = ',', value_name = "CAT")]
+    pub category: Vec<CategoryArg>,
+    /// Only entries that mention this device (repeatable)
+    #[arg(long, value_name = "ID", add = ArgValueCandidates::new(completion::devices))]
+    pub device: Vec<String>,
+    /// Only entries that mention this client (repeatable)
+    #[arg(long, value_name = "ID", add = ArgValueCandidates::new(completion::clients))]
+    pub client: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum PriorityArg {
+    Low,
+    Medium,
+    High,
+    VeryHigh,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CategoryArg {
+    Security,
+    UnifiDevices,
+    SoftwareUpdates,
+    Vpn,
+    Power,
+    UnifiEthernetPorts,
+    ClientDevices,
+    Audit,
+    InternetAndWan,
+    Unknown,
+}
+
+impl CategoryArg {
+    /// The controller's name for the category.
+    pub fn controller(self) -> &'static str {
+        match self {
+            Self::Security => "SECURITY",
+            Self::UnifiDevices => "UNIFI_DEVICES",
+            Self::SoftwareUpdates => "SOFTWARE_UPDATES",
+            Self::Vpn => "VPN",
+            Self::Power => "POWER",
+            Self::UnifiEthernetPorts => "UNIFI_ETHERNET_PORTS",
+            Self::ClientDevices => "CLIENT_DEVICES",
+            Self::Audit => "AUDIT",
+            Self::InternetAndWan => "INTERNET_AND_WAN",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]

@@ -407,6 +407,188 @@ mod with_fixtures {
             "Error: no gateway node found in topology\n"
         );
     }
+
+    const ALL_LINES: [&str; 10] = [
+        "Oct 08 12:00:00 internet-and-wan: Internet connection WAN1 ExampleISP on port 5 is down.",
+        "Oct 08 12:02:00 internet-and-wan: Internet connection WAN1 ExampleISP on port 5 is restored.",
+        "Oct 09 12:00:00 security: A network intrusion attempt from 192.168.10.67 to 198.51.100.7 has been detected.",
+        "Oct 10 12:00:00 security: MacBook Pro was blocked from accessing 192.168.100.5 by the Block IoT to LAN Firewall Policy.",
+        "Oct 11 06:00:00 audit: Network Application made a change to ? in UAP-02 ? settings. Source IP: ?",
+        "Oct 11 10:00:00 unifi-devices: UAP-02 moved to channel 11 from 1.",
+        "Oct 11 11:00:00 client-devices: MacBook Pro roamed from UAP-02 to UAP-01. Connection Info: Ch. 36 (5 GHz, 80 MHz), -60 dBm.",
+        "Oct 11 11:30:00 client-devices: nas-1 connected to LAN-SRV on US 8 60W Port 3. IP: 192.168.100.5",
+        "Oct 11 11:50:00 client-devices: Guest Phone disconnected from home-wifi-iot. Last Connected To: UAP-01.",
+        "Oct 11 11:50:00 client-devices: MacBook Pro connected to home-wifi on UAP-01.",
+    ];
+
+    fn logs_cmd(args: &[&str]) -> Command {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_unifictl"));
+        cmd.arg("--fixtures")
+            .arg(fixtures())
+            .arg("logs")
+            .args(args)
+            .env("TZ", "UTC")
+            .env("UNIFICTL_NOW", "2026-10-11T12:00:00Z")
+            .env_remove("NO_COLOR");
+        cmd
+    }
+
+    fn logs(args: &[&str]) -> Output {
+        logs_cmd(args).output().unwrap()
+    }
+
+    /// The fixture lines with these 1-based indexes, joined as output.
+    fn lines(indexes: &[usize]) -> String {
+        indexes
+            .iter()
+            .map(|i| format!("{}\n", ALL_LINES[i - 1]))
+            .collect()
+    }
+
+    fn ok(o: &Output) -> String {
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        stdout(o)
+    }
+
+    #[test]
+    fn logs_default_prints_everything_oldest_first() {
+        assert_eq!(ok(&logs(&[])), lines(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
+    }
+
+    #[test]
+    fn logs_lines_and_reverse() {
+        assert_eq!(ok(&logs(&["-n", "2"])), lines(&[9, 10]));
+        assert_eq!(ok(&logs(&["-r", "-n", "3"])), lines(&[10, 9, 8]));
+    }
+
+    #[test]
+    fn logs_priority_and_category() {
+        assert_eq!(ok(&logs(&["-p", "high"])), lines(&[1, 3]));
+        assert_eq!(ok(&logs(&["--category", "security"])), lines(&[3, 4]));
+        assert_eq!(
+            ok(&logs(&["--category", "security,audit"])),
+            lines(&[3, 4, 5])
+        );
+    }
+
+    #[test]
+    fn logs_device_and_client() {
+        assert_eq!(ok(&logs(&["--device", "uap-02"])), lines(&[5, 6, 7]));
+        assert_eq!(
+            ok(&logs(&[
+                "--client",
+                "macbook-pro-0001",
+                "--device",
+                "uap-01"
+            ])),
+            lines(&[7, 10])
+        );
+        assert_eq!(
+            ok(&logs(&["--device", "uap-01", "--device", "uap-02"])),
+            lines(&[5, 6, 7, 9, 10])
+        );
+    }
+
+    #[test]
+    fn logs_since_relative_hyphen_value() {
+        assert_eq!(ok(&logs(&["-S", "-1h"])), lines(&[7, 8, 9, 10]));
+        assert_eq!(ok(&logs(&["--since=-1h"])), lines(&[7, 8, 9, 10]));
+    }
+
+    #[test]
+    fn logs_absolute_window() {
+        assert_eq!(
+            ok(&logs(&["-S", "2026-10-11", "-U", "2026-10-11 10:00"])),
+            lines(&[5, 6])
+        );
+        assert_eq!(ok(&logs(&["-U", "2026-10-09"])), lines(&[1, 2]));
+    }
+
+    #[test]
+    fn logs_json_lines() {
+        assert_eq!(
+            ok(&logs(&[
+                "-o",
+                "json",
+                "--client",
+                "macbook-pro-0001",
+                "-n",
+                "1"
+            ])),
+            concat!(
+                r#"{"id":"65f00000000000000000000a","time":"2026-10-11T11:50:00.000+00:00","severity":"low","category":"clientDevices","subcategory":"monitoringWifi","event":"clientConnected","title":"WiFi Client Connected","message":"MacBook Pro connected to home-wifi on UAP-01.","devices":[{"kind":"device","id":"uap-01","name":"UAP-01"}],"clients":[{"kind":"client","id":"macbook-pro-0001","name":"MacBook Pro"}],"details":{"wlan":"home-wifi"}}"#,
+                "\n"
+            )
+        );
+        let all = ok(&logs(&["-o", "json"]));
+        assert_eq!(all.lines().count(), 10);
+        assert!(!all.contains('\x1b'));
+    }
+
+    #[test]
+    fn logs_color_always_paints_messages() {
+        let out = ok(&logs(&["-p", "high", "--color", "always"]));
+        assert_eq!(
+            out,
+            format!(
+                "Oct 08 12:00:00 internet-and-wan: \x1b[1;31m{}\x1b[0m\nOct 09 12:00:00 security: \x1b[31m{}\x1b[0m\n",
+                "Internet connection WAN1 ExampleISP on port 5 is down.",
+                "A network intrusion attempt from 192.168.10.67 to 198.51.100.7 has been detected."
+            )
+        );
+        assert_eq!(strip_ansi(&out), lines(&[1, 3]));
+    }
+
+    #[test]
+    fn logs_rejected_combinations() {
+        assert_eq!(logs(&["-f", "-U", "now"]).status.code(), Some(2));
+        assert_eq!(logs(&["-f", "-r"]).status.code(), Some(2));
+        let o = logs(&["-o", "ids"]);
+        assert_eq!(o.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&o.stderr).contains("-o ids is only supported by"));
+    }
+
+    #[test]
+    fn logs_errors() {
+        for (args, want) in [
+            (
+                &["--device", "nope"][..],
+                "Error: Network device not found: nope\n",
+            ),
+            (
+                &["--client", "nope"],
+                "Error: Network client not found: nope\n",
+            ),
+            (
+                &["-S", "2026-10-11", "-U", "2026-10-10"],
+                "Error: --since is after --until\n",
+            ),
+        ] {
+            let o = logs(args);
+            assert_eq!(o.status.code(), Some(1), "{args:?}");
+            assert_eq!(String::from_utf8_lossy(&o.stderr), want, "{args:?}");
+        }
+        let o = logs(&["-S", "soon"]);
+        assert_eq!(o.status.code(), Some(1));
+        assert!(
+            String::from_utf8_lossy(&o.stderr)
+                .starts_with("Error: invalid time \"soon\": use now, today")
+        );
+    }
+
+    #[test]
+    fn logs_into_closed_pipe_is_quiet() {
+        use std::process::Stdio;
+        let mut child = logs_cmd(&[])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        drop(child.stdout.take());
+        let out = child.wait_with_output().unwrap();
+        assert!(out.status.success(), "{:?}", out.status);
+        assert_eq!(String::from_utf8_lossy(&out.stderr), "");
+    }
 }
 
 #[test]
