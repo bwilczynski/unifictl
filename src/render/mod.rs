@@ -5,6 +5,7 @@ pub mod check;
 pub mod clients;
 pub mod devices;
 pub mod format;
+pub mod logs;
 pub mod ports;
 pub mod ssids;
 pub mod style;
