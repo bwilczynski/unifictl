@@ -4,14 +4,7 @@ A command-line client for UniFi network controllers: devices, clients, ports,
 VLANs, SSIDs, WANs and a topology tree, straight from the controller with no
 server in between.
 
-```sh
-$ unifictl topology --include-wireless
-UCG-Fiber (gateway)
-└── Switch-Core (switch) [port 1, 10 GbE]
-    ├── NAS (client, wired, online) [port 1, 10 GbE]
-    └── AP-Office (accessPoint) [3 clients] [port 3, 2.5 GbE]
-        └── MacBook-Pro (client, wireless, online) [HomeWiFi, -48 dBm]
-```
+![unifictl topology --include-wireless: a UCG-Fiber gateway, a core switch, two access points with their wireless clients and a Flex switch with wired clients](docs/demo/topology.png)
 
 ## Install
 
@@ -101,6 +94,12 @@ On a terminal, status cells are coloured (green healthy, red disconnected, dim
 offline/down, yellow disabled) and names are blue, in your terminal's own palette. `--color
 always|never` overrides that; `NO_COLOR` turns it off.
 
+Every device, then zooming in on a switch: its port table with PoE draw,
+per-port traffic and who's on the other end of each cable, and its VLAN
+config.
+
+![unifictl devices list, then unifictl devices get switch-core --all-ports](docs/demo/devices.gif)
+
 ## Shell completions
 
 `unifictl completions <bash|zsh|fish|powershell|elvish>` prints a script that
@@ -145,6 +144,11 @@ repository, or you can point `HOMELAB_API_DIR` and `HOMELAB_CLI_DIR` at them.
 mise run test   # unit, CLI and golden tests
 mise run lint   # clippy + rustfmt
 ```
+
+The images in this README are recorded with [VHS](https://github.com/charmbracelet/vhs)
+from the tapes in `docs/demo`, against a made-up network in
+`docs/demo/fixtures` (no controller needed). `mise run demo` re-renders
+them; it needs `ffmpeg` on your `PATH`.
 
 ## Release
 

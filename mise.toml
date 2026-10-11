@@ -3,9 +3,13 @@
 rust = { version = "1.99.0", profile = "minimal", components = ["clippy", "rustfmt"] }
 go = "1.26.2" # golden harness only: builds homelab-api + hlctl (both go 1.26.2)
 cargo-dist = "0.33.0"
+# README demos only (mise run demo); vhs also needs ffmpeg on PATH.
+vhs = "0.12.1"
+ttyd = "1.7.7"
 
 [tasks]
 build = "cargo build --release"
 test = "cargo test --features fixtures"
 lint = "cargo clippy --all-targets --features fixtures -- -D warnings && cargo fmt --check"
 golden = "tools/golden/generate.sh"
+demo = "docs/demo/render.sh"

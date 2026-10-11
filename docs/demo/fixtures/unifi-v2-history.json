@@ -1,0 +1,21 @@
+{
+  "data": [
+    {
+      "id": "020000a10c05",
+      "mac": "02:00:00:a1:0c:05",
+      "display_name": "Steam-Deck",
+      "name": "Steam-Deck",
+      "hostname": "steamdeck",
+      "ip": "",
+      "last_ip": "192.168.10.54",
+      "is_wired": false,
+      "status": "offline",
+      "last_uplink_name": "AP-Living-Room",
+      "last_uplink_mac": "02:00:00:20:00:02",
+      "uptime": 0,
+      "essid": "HomeWiFi",
+      "signal": null,
+      "last_seen": 1791540000
+    }
+  ]
+}
