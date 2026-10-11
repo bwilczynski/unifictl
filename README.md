@@ -4,7 +4,12 @@ A command-line client for UniFi network controllers: devices, clients, ports,
 VLANs, SSIDs, WANs, a topology tree and the system log, straight from the
 controller with no server in between.
 
-![unifictl topology --include-wireless: a UCG-Fiber gateway, a core switch, two access points with their wireless clients and a Flex switch with wired clients](docs/demo/topology.png)
+![Diagnosing a robot vacuum that keeps dropping off Wi-Fi: unifictl clients list, then clients get roborock-0c04 shows a weak -77 dBm signal, then logs --client roborock-0c04 shows it roaming between AP-Office and AP-Living-Room every few minutes](docs/demo/roaming.gif)
+
+A misbehaving client in three commands: find it in `clients list`, check its
+signal with `clients get`, then read its story from the controller's log with
+`logs --client`. Here a robot vacuum sitting between two access points on a
+weak 2.4 GHz signal ping-pongs from one to the other every few minutes.
 
 ## Install
 
@@ -97,9 +102,10 @@ always|never` overrides that; `NO_COLOR` turns it off.
 
 Every device, then zooming in on a switch: its port table with PoE draw,
 per-port traffic and who's on the other end of each cable, and its VLAN
-config.
+config. Then the whole network as a tree, with the wireless clients under the
+access point each one is on.
 
-![unifictl devices list, then unifictl devices get switch-core --all-ports](docs/demo/devices.gif)
+![unifictl devices list, then unifictl devices get switch-core --all-ports, then unifictl topology --include-wireless](docs/demo/devices.gif)
 
 ### Logs
 
