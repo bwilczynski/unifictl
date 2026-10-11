@@ -1,0 +1,32 @@
+{
+  "data": [
+    {
+      "_id": "65f0a2000000000000000001",
+      "name": "HomeWiFi",
+      "networkconf_id": "65f0a1000000000000000002",
+      "security": "wpapsk",
+      "wpa_mode": "wpa2",
+      "wpa3_support": true,
+      "wpa3_transition": true,
+      "wlan_bands": [
+        "2g",
+        "5g",
+        "6g"
+      ],
+      "enabled": true
+    },
+    {
+      "_id": "65f0a2000000000000000002",
+      "name": "IoT",
+      "networkconf_id": "65f0a1000000000000000003",
+      "security": "wpapsk",
+      "wpa_mode": "wpa2",
+      "wpa3_support": false,
+      "wpa3_transition": false,
+      "wlan_bands": [
+        "2g"
+      ],
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+#!/bin/sh
+# What the demo tapes call as `unifictl`: a --features fixtures build reading
+# the made-up network in docs/demo/fixtures, so recordings need no controller.
+demo=$(cd "$(dirname "$0")/.." && pwd)
+exec "${UNIFICTL_DEMO_BIN:-$demo/../../target/debug/unifictl}" --fixtures "$demo/fixtures" "$@"
