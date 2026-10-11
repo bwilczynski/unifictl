@@ -87,6 +87,13 @@ mod with_fixtures {
             &["vlans", "get", "lan-mgmt"],
             &["ssids", "list"],
             &["ssids", "get", "home-wifi"],
+            &["devices", "list", "--wide"],
+            &["clients", "list", "--wide"],
+            &["vlans", "list", "--wide"],
+            &["ssids", "list", "--wide"],
+            &["wans", "list", "--wide"],
+            &["ports", "list", "--wide"],
+            &["clients", "get", "macbook-pro-0001"],
         ] {
             let plain = stdout(&run(args));
             let mut colored_args = vec!["--color", "always"];
@@ -97,6 +104,96 @@ mod with_fixtures {
             assert!(colored.contains("\x1b["), "{args:?}: not coloured");
             assert_eq!(strip_ansi(&colored), plain, "{args:?}: layout changed");
         }
+    }
+
+    #[test]
+    fn wide_adds_columns_after_the_default_ones() {
+        for cmd in ["devices", "clients", "vlans", "ssids", "wans"] {
+            let plain = stdout(&run(&[cmd, "list"]));
+            let wide = stdout(&run(&[cmd, "list", "--wide"]));
+            let head = |s: &str| {
+                s.lines()
+                    .next()
+                    .unwrap()
+                    .split_whitespace()
+                    .map(String::from)
+                    .collect::<Vec<_>>()
+            };
+            let (p, w) = (head(&plain), head(&wide));
+            assert!(w.len() > p.len(), "{cmd}");
+            assert_eq!(w[..p.len()], p[..], "{cmd}: default columns come first");
+            assert_eq!(plain.lines().count(), wide.lines().count(), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn mac_only_with_wide() {
+        for cmd in ["devices", "clients"] {
+            let header = |args: &[&str]| stdout(&run(args)).lines().next().unwrap().to_string();
+            assert!(!header(&[cmd, "list"]).contains("MAC"), "{cmd}");
+            assert!(header(&[cmd, "list", "--wide"]).contains("MAC"), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn wide_does_not_change_json_or_ids() {
+        for cmd in ["devices", "clients", "vlans", "ssids", "wans"] {
+            for fmt in ["json", "ids"] {
+                let a = stdout(&run(&["-o", fmt, cmd, "list"]));
+                let b = stdout(&run(&["-o", fmt, cmd, "list", "--wide"]));
+                assert_eq!(a, b, "{cmd} -o {fmt}");
+            }
+        }
+    }
+
+    #[test]
+    fn list_items_equal_get_json() {
+        for cmd in ["clients", "vlans", "wans"] {
+            let list: serde_json::Value =
+                serde_json::from_slice(&run(&["-o", "json", cmd, "list"]).stdout).unwrap();
+            for item in list["items"].as_array().unwrap() {
+                let id = item["id"].as_str().unwrap();
+                let got: serde_json::Value =
+                    serde_json::from_slice(&run(&["-o", "json", cmd, "get", id]).stdout).unwrap();
+                assert_eq!(&got, item, "{cmd} {id}");
+            }
+        }
+    }
+
+    #[test]
+    fn health_colours() {
+        let devices = stdout(&run(&["--color", "always", "devices", "list", "--wide"]));
+        assert!(devices.contains("\x1b[32m98%\x1b[0m"));
+        assert!(devices.contains("\x1b[33m100 Mbps\x1b[0m"));
+        assert!(devices.contains("\x1b[31m1 GbE\x1b[0m"));
+        let clients = stdout(&run(&["--color", "always", "clients", "list", "--wide"]));
+        assert!(clients.contains("\x1b[33m-69 dBm\x1b[0m"));
+        assert!(clients.contains("\x1b[31m-80 dBm\x1b[0m"));
+        assert!(clients.contains("\x1b[36m512.0 KB/s\x1b[0m"));
+        assert!(clients.contains("\x1b[35m10.0 KB/s\x1b[0m"));
+        let traffic = stdout(&run(&["--color", "always", "clients", "traffic"]));
+        assert!(traffic.contains("\x1b[36m") && traffic.contains("\x1b[35m"));
+        let json = stdout(&run(&[
+            "--color", "always", "-o", "json", "clients", "list", "--wide",
+        ]));
+        assert!(!json.contains('\x1b'));
+    }
+
+    #[test]
+    fn device_json_carries_health_fields() {
+        let v: serde_json::Value =
+            serde_json::from_slice(&run(&["-o", "json", "devices", "list"]).stdout).unwrap();
+        let ap = v["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["id"] == "uap-01")
+            .unwrap();
+        assert_eq!(ap["experience"], 98);
+        assert_eq!(ap["uplink"]["linkSpeed"], "fe");
+        assert_eq!(ap["uplink"]["maxLinkSpeed"], "gbe1");
+        assert_eq!(ap["uplink"]["fullDuplex"], true);
+        assert_eq!(ap["model"], "U7LT");
     }
 
     #[test]

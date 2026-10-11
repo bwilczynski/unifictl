@@ -15,7 +15,10 @@
       "uptime": 3651480,
       "essid": null,
       "signal": null,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wired_rate_mbps": 1000,
+      "tx_bytes-r": 20480.0,
+      "rx_bytes-r": 2048.0
     },
     {
       "id": "020000a10a02",
@@ -32,7 +35,10 @@
       "uptime": 21600,
       "essid": null,
       "signal": null,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wired_rate_mbps": 1000,
+      "tx_bytes-r": 40960.0,
+      "rx_bytes-r": 4096.0
     },
     {
       "id": "020000a10b01",
@@ -49,7 +55,11 @@
       "uptime": 18000,
       "essid": "HomeWiFi",
       "signal": -48,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wifi_experience_score": 95,
+      "tx_rate": 573500,
+      "tx_bytes-r": 61440.0,
+      "rx_bytes-r": 6144.0
     },
     {
       "id": "020000a10b02",
@@ -66,7 +76,11 @@
       "uptime": 172800,
       "essid": "HomeWiFi",
       "signal": -55,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wifi_experience_score": 95,
+      "tx_rate": 573500,
+      "tx_bytes-r": 81920.0,
+      "rx_bytes-r": 8192.0
     },
     {
       "id": "020000a10b03",
@@ -83,7 +97,11 @@
       "uptime": 14400,
       "essid": "IoT",
       "signal": -71,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wifi_experience_score": 70,
+      "tx_rate": 573500,
+      "tx_bytes-r": 102400.0,
+      "rx_bytes-r": 10240.0
     },
     {
       "id": "020000a10c01",
@@ -100,7 +118,11 @@
       "uptime": 25200,
       "essid": "HomeWiFi",
       "signal": -52,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wifi_experience_score": 95,
+      "tx_rate": 573500,
+      "tx_bytes-r": 122880.0,
+      "rx_bytes-r": 12288.0
     },
     {
       "id": "020000a10c02",
@@ -117,7 +139,11 @@
       "uptime": 86400,
       "essid": "HomeWiFi",
       "signal": -65,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wifi_experience_score": 95,
+      "tx_rate": 573500,
+      "tx_bytes-r": 143360.0,
+      "rx_bytes-r": 14336.0
     },
     {
       "id": "020000a10c03",
@@ -134,7 +160,11 @@
       "uptime": 1036800,
       "essid": "HomeWiFi",
       "signal": -41,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wifi_experience_score": 95,
+      "tx_rate": 573500,
+      "tx_bytes-r": 163840.0,
+      "rx_bytes-r": 16384.0
     },
     {
       "id": "020000a10c04",
@@ -151,7 +181,11 @@
       "uptime": 777600,
       "essid": "IoT",
       "signal": -77,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wifi_experience_score": 35,
+      "tx_rate": 72200,
+      "tx_bytes-r": 184320.0,
+      "rx_bytes-r": 18432.0
     },
     {
       "id": "020000a10d01",
@@ -168,7 +202,10 @@
       "uptime": 3651180,
       "essid": null,
       "signal": null,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wired_rate_mbps": 1000,
+      "tx_bytes-r": 204800.0,
+      "rx_bytes-r": 20480.0
     },
     {
       "id": "020000a10d02",
@@ -185,7 +222,10 @@
       "uptime": 777600,
       "essid": null,
       "signal": null,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wired_rate_mbps": 1000,
+      "tx_bytes-r": 225280.0,
+      "rx_bytes-r": 22528.0
     },
     {
       "id": "020000a10d03",
@@ -202,7 +242,10 @@
       "uptime": 3651120,
       "essid": null,
       "signal": null,
-      "last_seen": 1791712800
+      "last_seen": 1791712800,
+      "wired_rate_mbps": 1000,
+      "tx_bytes-r": 245760.0,
+      "rx_bytes-r": 24576.0
     }
   ]
 }
