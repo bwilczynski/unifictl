@@ -15,24 +15,19 @@ impl Service {
             .network_conf()?
             .iter()
             .filter(|n| is_lan_network(n))
-            .map(|n| Vlan {
-                id: to_kebab(&n.name),
-                name: n.name.clone(),
-                vlan_id: extract_vlan_id(&n.vlan),
-                subnet: parse_ip_subnet(&n.ip_subnet).0,
-            })
+            .map(build_vlan)
             .collect();
         Ok(VlanList { items })
     }
 
-    pub fn get_vlan(&self, id: &str) -> Result<VlanDetail> {
+    pub fn get_vlan(&self, id: &str) -> Result<Vlan> {
         let networks = self.api.network_conf()?;
         let n = networks
             .iter()
             .filter(|n| is_lan_network(n))
             .find(|n| to_kebab(&n.name) == id)
             .ok_or_else(|| Error::NotFound(format!("VLAN not found: {id}")))?;
-        Ok(build_vlan_detail(n))
+        Ok(build_vlan(n))
     }
 }
 
@@ -40,7 +35,7 @@ fn is_lan_network(n: &NetworkConf) -> bool {
     n.purpose == "corporate" || n.purpose == "guest"
 }
 
-fn build_vlan_detail(n: &NetworkConf) -> VlanDetail {
+fn build_vlan(n: &NetworkConf) -> Vlan {
     let (subnet, gateway_ip, broadcast_ip) = parse_ip_subnet(&n.ip_subnet);
     let dhcp_mode = if n.dhcpd_enabled {
         DhcpMode::Server
@@ -49,7 +44,7 @@ fn build_vlan_detail(n: &NetworkConf) -> VlanDetail {
     } else {
         DhcpMode::Disabled
     };
-    VlanDetail {
+    Vlan {
         id: to_kebab(&n.name),
         name: n.name.clone(),
         vlan_id: extract_vlan_id(&n.vlan),
@@ -198,5 +193,13 @@ mod tests {
             parse_ip_subnet("garbage"),
             ("garbage".into(), String::new(), String::new())
         );
+    }
+
+    #[test]
+    fn list_item_equals_get() {
+        let s = svc(fixtures());
+        for v in s.list_vlans().unwrap().items {
+            assert_eq!(s.get_vlan(&v.id).unwrap(), v, "{}", v.id);
+        }
     }
 }

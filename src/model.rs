@@ -457,15 +457,6 @@ pub struct NetworkTopology {
 // ---------- vlans / wans / ssids ----------
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Vlan {
-    pub id: String,
-    pub name: String,
-    pub vlan_id: i64,
-    pub subnet: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct VlanList {
     pub items: Vec<Vlan>,
 }
@@ -476,9 +467,10 @@ pub struct DhcpRange {
     pub end: String,
 }
 
+/// A VLAN, the same in `vlans list` and `vlans get`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VlanDetail {
+pub struct Vlan {
     pub id: String,
     pub name: String,
     pub vlan_id: i64,
@@ -494,23 +486,14 @@ pub struct VlanDetail {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Wan {
-    pub id: String,
-    pub name: String,
-    pub ip_address: String,
-    pub status: WanStatus,
-    pub uptime: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct WanList {
     pub items: Vec<Wan>,
 }
 
+/// A WAN, the same in `wans list` and `wans get`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WanDetail {
+pub struct Wan {
     pub id: String,
     pub name: String,
     pub ip_address: String,
@@ -527,6 +510,7 @@ pub struct Ssid {
     pub bands: Vec<WifiBand>,
     pub vlan_id: i64,
     pub num_clients: i64,
+    pub security_protocol: SecurityProtocol,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -537,15 +521,11 @@ pub struct SsidList {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SsidDetail {
-    pub id: String,
-    pub name: String,
-    pub bands: Vec<WifiBand>,
-    pub vlan_id: i64,
-    pub num_clients: i64,
+    #[serde(flatten)]
+    pub base: Ssid,
     pub clients: Vec<ClientRef>,
     #[serde(serialize_with = "empty_as_null")]
     pub broadcasting_aps: Vec<DeviceRef>,
-    pub security_protocol: SecurityProtocol,
 }
 
 // ---------- -o ids ----------
@@ -804,14 +784,16 @@ mod tests {
     #[test]
     fn empty_broadcasting_aps_serialize_as_null() {
         let s = SsidDetail {
-            id: "x".into(),
-            name: "x".into(),
-            bands: vec![WifiBand::Band2g],
-            vlan_id: 1,
-            num_clients: 0,
+            base: Ssid {
+                id: "x".into(),
+                name: "x".into(),
+                bands: vec![WifiBand::Band2g],
+                vlan_id: 1,
+                num_clients: 0,
+                security_protocol: SecurityProtocol::Wpa2,
+            },
             clients: vec![],
             broadcasting_aps: vec![],
-            security_protocol: SecurityProtocol::Wpa2,
         };
         let v = serde_json::to_value(&s).unwrap();
         assert_eq!(v["broadcastingAps"], serde_json::Value::Null);

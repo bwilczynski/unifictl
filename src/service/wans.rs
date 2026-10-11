@@ -17,22 +17,12 @@ impl Service {
         let items = networks
             .iter()
             .filter(|n| n.purpose == "wan")
-            .map(|n| {
-                let (ip_address, status, uptime) =
-                    live_fields(resolve_iface(gw, &n.wan_networkgroup), gw);
-                Wan {
-                    id: to_kebab(&n.name),
-                    name: n.name.clone(),
-                    ip_address,
-                    status,
-                    uptime,
-                }
-            })
+            .map(|n| build_wan(n, gw))
             .collect();
         Ok(WanList { items })
     }
 
-    pub fn get_wan(&self, id: &str) -> Result<WanDetail> {
+    pub fn get_wan(&self, id: &str) -> Result<Wan> {
         fetch!(
             networks = self.api.network_conf(),
             devices = self.api.devices(),
@@ -43,16 +33,20 @@ impl Service {
             .filter(|n| n.purpose == "wan")
             .find(|n| to_kebab(&n.name) == id)
             .ok_or_else(|| Error::NotFound(format!("WAN not found: {id}")))?;
-        let iface = resolve_iface(gw, &n.wan_networkgroup);
-        let (ip_address, status, uptime) = live_fields(iface, gw);
-        Ok(WanDetail {
-            id: to_kebab(&n.name),
-            name: n.name.clone(),
-            ip_address,
-            status,
-            uptime,
-            dns_servers: dns_servers(iface, n),
-        })
+        Ok(build_wan(n, gw))
+    }
+}
+
+fn build_wan(n: &NetworkConf, gw: Option<&Device>) -> Wan {
+    let iface = resolve_iface(gw, &n.wan_networkgroup);
+    let (ip_address, status, uptime) = live_fields(iface, gw);
+    Wan {
+        id: to_kebab(&n.name),
+        name: n.name.clone(),
+        ip_address,
+        status,
+        uptime,
+        dns_servers: dns_servers(iface, n),
     }
 }
 
@@ -146,5 +140,13 @@ mod tests {
         let err = svc(fixtures()).get_wan("nonexistent").unwrap_err();
         assert!(matches!(err, Error::NotFound(_)));
         assert_eq!(err.to_string(), "WAN not found: nonexistent");
+    }
+
+    #[test]
+    fn list_item_equals_get() {
+        let s = svc(fixtures());
+        for w in s.list_wans().unwrap().items {
+            assert_eq!(s.get_wan(&w.id).unwrap(), w, "{}", w.id);
+        }
     }
 }

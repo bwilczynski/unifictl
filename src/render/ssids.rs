@@ -5,17 +5,25 @@ use super::format::format_bands;
 use super::style;
 use crate::model::{SsidDetail, SsidList};
 
-pub fn list(list: &SsidList, color: bool) -> String {
+pub fn list(list: &SsidList, wide: bool, color: bool) -> String {
     let mut t = Table::new();
-    t.row(&["ID", "NAME", "VLAN ID", "BANDS", "CLIENTS"]);
+    let mut header = vec!["ID", "NAME", "VLAN ID", "BANDS", "CLIENTS"];
+    if wide {
+        header.push("SECURITY");
+    }
+    t.row(&header);
     for s in &list.items {
-        t.row(&[
-            &s.id,
-            &style::name(&s.name, color),
-            &s.vlan_id.to_string(),
-            &format_bands(&s.bands),
-            &s.num_clients.to_string(),
-        ]);
+        let mut row = vec![
+            s.id.clone(),
+            style::name(&s.name, color),
+            s.vlan_id.to_string(),
+            format_bands(&s.bands),
+            s.num_clients.to_string(),
+        ];
+        if wide {
+            row.push(s.security_protocol.as_str().to_string());
+        }
+        t.row(&row.iter().map(String::as_str).collect::<Vec<_>>());
     }
     t.finish()
 }
@@ -23,12 +31,12 @@ pub fn list(list: &SsidList, color: bool) -> String {
 pub fn get(s: &SsidDetail, color: bool) -> String {
     let mut t = Table::new();
     t.row(&["FIELD", "VALUE"]);
-    t.row(&["ID", &s.id]);
-    t.row(&["NAME", &style::name(&s.name, color)]);
-    t.row(&["VLAN ID", &s.vlan_id.to_string()]);
-    t.row(&["BANDS", &format_bands(&s.bands)]);
-    t.row(&["CLIENTS", &s.num_clients.to_string()]);
-    t.row(&["SECURITY", s.security_protocol.as_str()]);
+    t.row(&["ID", &s.base.id]);
+    t.row(&["NAME", &style::name(&s.base.name, color)]);
+    t.row(&["VLAN ID", &s.base.vlan_id.to_string()]);
+    t.row(&["BANDS", &format_bands(&s.base.bands)]);
+    t.row(&["CLIENTS", &s.base.num_clients.to_string()]);
+    t.row(&["SECURITY", s.base.security_protocol.as_str()]);
     t.flush();
     t.blank();
     t.line("--- CLIENTS ---");
@@ -54,19 +62,39 @@ mod tests {
     #[test]
     fn detail_sections() {
         let d = SsidDetail {
-            id: "home".into(),
-            name: "Home".into(),
-            bands: vec![WifiBand::Band2g, WifiBand::Band5g],
-            vlan_id: 10,
-            num_clients: 1,
+            base: Ssid {
+                id: "home".into(),
+                name: "Home".into(),
+                bands: vec![WifiBand::Band2g, WifiBand::Band5g],
+                vlan_id: 10,
+                num_clients: 1,
+                security_protocol: SecurityProtocol::Wpa2Wpa3,
+            },
             clients: vec![ClientRef::new("phone-aa".into(), "Phone".into())],
             broadcasting_aps: vec![],
-            security_protocol: SecurityProtocol::Wpa2Wpa3,
         };
         let out = get(&d, false);
         assert!(out.contains("2.4 GHz, 5 GHz"));
         assert!(out.contains("wpa2Wpa3"));
         assert!(out.contains("\n\n--- CLIENTS ---\nNAME\nPhone\n"));
         assert!(out.ends_with("\n\n--- BROADCASTING APs ---\nNAME\n"));
+    }
+
+    #[test]
+    fn wide_list_adds_security() {
+        let l = SsidList {
+            items: vec![Ssid {
+                id: "home-wifi".into(),
+                name: "home-wifi".into(),
+                bands: vec![WifiBand::Band5g],
+                vlan_id: 10,
+                num_clients: 2,
+                security_protocol: SecurityProtocol::Wpa2Wpa3,
+            }],
+        };
+        let out = list(&l, true, false);
+        assert!(out.lines().next().unwrap().ends_with("SECURITY"));
+        assert!(out.lines().nth(1).unwrap().ends_with("wpa2Wpa3"));
+        assert!(!list(&l, false, false).contains("SECURITY"));
     }
 }
