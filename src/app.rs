@@ -422,25 +422,25 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
             })
         }
         Command::Vlans { command } => match command {
-            LookupCommand::List => {
-                emit_list(out, &svc.list_vlans()?, |l| render::vlans::list(l, color))
-            }
+            LookupCommand::List { wide } => emit_list(out, &svc.list_vlans()?, |l| {
+                render::vlans::list(l, *wide, color)
+            }),
             LookupCommand::Get { id } => {
                 emit(out, &svc.get_vlan(id)?, |v| render::vlans::get(v, color))
             }
         },
         Command::Ssids { command } => match command {
-            LookupCommand::List => {
-                emit_list(out, &svc.list_ssids()?, |l| render::ssids::list(l, color))
-            }
+            LookupCommand::List { wide } => emit_list(out, &svc.list_ssids()?, |l| {
+                render::ssids::list(l, *wide, color)
+            }),
             LookupCommand::Get { id } => {
                 emit(out, &svc.get_ssid(id)?, |s| render::ssids::get(s, color))
             }
         },
         Command::Wans { command } => match command {
-            LookupCommand::List => {
-                emit_list(out, &svc.list_wans()?, |l| render::wans::list(l, color))
-            }
+            LookupCommand::List { wide } => emit_list(out, &svc.list_wans()?, |l| {
+                render::wans::list(l, *wide, color)
+            }),
             LookupCommand::Get { id } => {
                 emit(out, &svc.get_wan(id)?, |w| render::wans::get(w, color))
             }
@@ -493,11 +493,11 @@ fn lists_ids(cmd: &Command) -> bool {
                     ..
                 })
         } | Command::Vlans {
-            command: LookupCommand::List
+            command: LookupCommand::List { .. }
         } | Command::Ssids {
-            command: LookupCommand::List
+            command: LookupCommand::List { .. }
         } | Command::Wans {
-            command: LookupCommand::List
+            command: LookupCommand::List { .. }
         }
     )
 }

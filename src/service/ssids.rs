@@ -21,12 +21,9 @@ impl Service {
         let items = wlans
             .iter()
             .filter(|w| w.enabled)
-            .map(|w| Ssid {
-                id: to_kebab(&w.name),
-                name: w.name.clone(),
-                bands: map_bands(&w.wlan_bands),
-                vlan_id: ssid_vlan_id(w, &networks),
-                num_clients: by_ssid.get(w.name.as_str()).map_or(0, |v| v.len() as i64),
+            .map(|w| {
+                let n = by_ssid.get(w.name.as_str()).map_or(0, |v| v.len() as i64);
+                build_ssid(w, &networks, n)
             })
             .collect();
         Ok(SsidList { items })
@@ -60,15 +57,21 @@ impl Service {
         broadcasting_aps.sort_by(|a, b| a.id.cmp(&b.id));
 
         Ok(SsidDetail {
-            id: id.to_string(),
-            name: w.name.clone(),
-            bands: map_bands(&w.wlan_bands),
-            vlan_id: ssid_vlan_id(w, &networks),
-            num_clients: ssid_clients.len() as i64,
+            base: build_ssid(w, &networks, ssid_clients.len() as i64),
             clients: ssid_clients.iter().map(|s| client_ref(s)).collect(),
             broadcasting_aps,
-            security_protocol: security_protocol(w),
         })
+    }
+}
+
+fn build_ssid(w: &WlanConf, networks: &[NetworkConf], num_clients: i64) -> Ssid {
+    Ssid {
+        id: to_kebab(&w.name),
+        name: w.name.clone(),
+        bands: map_bands(&w.wlan_bands),
+        vlan_id: ssid_vlan_id(w, networks),
+        num_clients,
+        security_protocol: security_protocol(w),
     }
 }
 
@@ -185,9 +188,9 @@ mod tests {
             ..fixtures()
         };
         let d = svc(api).get_ssid("home-wifi-iot").unwrap();
-        assert_eq!(d.id, "home-wifi-iot");
-        assert_eq!(d.vlan_id, 20);
-        assert_eq!(d.num_clients, 2);
+        assert_eq!(d.base.id, "home-wifi-iot");
+        assert_eq!(d.base.vlan_id, 20);
+        assert_eq!(d.base.num_clients, 2);
         assert_eq!(d.clients.len(), 2);
         assert_eq!(d.broadcasting_aps.len(), 2);
         assert!(d.broadcasting_aps.iter().all(|ap| ap.kind == "device"));
@@ -248,5 +251,13 @@ mod tests {
             security_protocol(&w("wpapsk", "", false)),
             SecurityProtocol::Wpa2
         );
+    }
+
+    #[test]
+    fn list_item_is_detail_base() {
+        let s = svc(fixtures());
+        for item in s.list_ssids().unwrap().items {
+            assert_eq!(s.get_ssid(&item.id).unwrap().base, item, "{}", item.id);
+        }
     }
 }

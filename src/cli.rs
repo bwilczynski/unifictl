@@ -303,7 +303,11 @@ impl CategoryArg {
 #[derive(Debug, Subcommand)]
 pub enum LookupCommand {
     /// List all
-    List,
+    List {
+        /// Show additional columns
+        #[arg(long)]
+        wide: bool,
+    },
     /// Show one
     Get {
         /// ID, as shown by `list`

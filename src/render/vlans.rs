@@ -2,23 +2,47 @@
 
 use super::Table;
 use super::style;
-use crate::model::{DhcpMode, VlanDetail, VlanList};
+use crate::model::{DhcpMode, Vlan, VlanList};
 
-pub fn list(list: &VlanList, color: bool) -> String {
+pub fn list(list: &VlanList, wide: bool, color: bool) -> String {
     let mut t = Table::new();
-    t.row(&["ID", "NAME", "VLAN ID", "SUBNET"]);
+    let mut header = vec!["ID", "NAME", "VLAN ID", "SUBNET"];
+    if wide {
+        header.extend(["GATEWAY IP", "DHCP MODE", "DHCP RANGE"]);
+    }
+    t.row(&header);
     for v in &list.items {
-        t.row(&[
-            &v.id,
-            &style::name(&v.name, color),
-            &v.vlan_id.to_string(),
-            &v.subnet,
-        ]);
+        let mut row = vec![
+            v.id.clone(),
+            style::name(&v.name, color),
+            v.vlan_id.to_string(),
+            v.subnet.clone(),
+        ];
+        if wide {
+            row.extend([
+                if v.gateway_ip.is_empty() {
+                    "-".to_string()
+                } else {
+                    v.gateway_ip.clone()
+                },
+                v.dhcp_mode.as_str().to_string(),
+                dhcp_range(v).unwrap_or_else(|| "-".to_string()),
+            ]);
+        }
+        t.row(&row.iter().map(String::as_str).collect::<Vec<_>>());
     }
     t.finish()
 }
 
-pub fn get(v: &VlanDetail, color: bool) -> String {
+/// "start - end", only in DHCP server mode.
+fn dhcp_range(v: &Vlan) -> Option<String> {
+    match (v.dhcp_mode, &v.dhcp_range) {
+        (DhcpMode::Server, Some(r)) => Some(format!("{} - {}", r.start, r.end)),
+        _ => None,
+    }
+}
+
+pub fn get(v: &Vlan, color: bool) -> String {
     let mut t = Table::new();
     t.row(&["FIELD", "VALUE"]);
     t.row(&["ID", &v.id]);
@@ -28,8 +52,8 @@ pub fn get(v: &VlanDetail, color: bool) -> String {
     t.row(&["GATEWAY IP", &v.gateway_ip]);
     t.row(&["BROADCAST", &v.broadcast_ip]);
     t.row(&["DHCP MODE", v.dhcp_mode.as_str()]);
-    if let (DhcpMode::Server, Some(r)) = (v.dhcp_mode, &v.dhcp_range) {
-        t.row(&["DHCP RANGE", &format!("{} - {}", r.start, r.end)]);
+    if let Some(r) = dhcp_range(v) {
+        t.row(&["DHCP RANGE", &r]);
     }
     if let (DhcpMode::Relay, Some(relay)) = (v.dhcp_mode, &v.relay_server) {
         t.row(&["RELAY", relay]);
@@ -43,8 +67,8 @@ mod tests {
     use super::*;
     use crate::model::*;
 
-    fn detail(mode: DhcpMode) -> VlanDetail {
-        VlanDetail {
+    fn detail(mode: DhcpMode) -> Vlan {
+        Vlan {
             id: "lan-iot".into(),
             name: "LAN-IOT".into(),
             vlan_id: 20,
@@ -81,5 +105,47 @@ mod tests {
                 .any(|l| l.starts_with("RELAY") && l.ends_with("10.0.0.1"))
         );
         assert!(!out.contains("DHCP RANGE"));
+    }
+
+    #[test]
+    fn wide_list_adds_gateway_and_dhcp() {
+        let l = VlanList {
+            items: vec![
+                detail(DhcpMode::Server),
+                Vlan {
+                    id: "lan-x".into(),
+                    ..detail(DhcpMode::Relay)
+                },
+            ],
+        };
+        let narrow = list(&l, false, false);
+        assert_eq!(
+            narrow
+                .lines()
+                .next()
+                .unwrap()
+                .split_whitespace()
+                .collect::<Vec<_>>(),
+            ["ID", "NAME", "VLAN", "ID", "SUBNET"]
+        );
+        let out = list(&l, true, false);
+        assert!(
+            out.lines()
+                .next()
+                .unwrap()
+                .ends_with("GATEWAY IP    DHCP MODE  DHCP RANGE"),
+            "{out}"
+        );
+        assert!(
+            out.lines()
+                .nth(1)
+                .unwrap()
+                .ends_with("192.168.20.1  server     192.168.20.6 - 192.168.20.254"),
+            "{out}"
+        );
+        assert!(
+            out.lines().nth(2).unwrap().ends_with("relay      -"),
+            "range only for server: {out}"
+        );
     }
 }
