@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/bwilczynski/unifictl/compare/v0.2.1...v0.2.2) - 2026-10-11
+
+### Added
+
+- add unifictl logs with journalctl-style flags and --follow
+- render log entries as journalctl-style lines and JSON Lines
+- query, filter and follow the system log
+- parse journalctl-style --since and --until times
+- read the controller's system log
+
 ## [0.2.1](https://github.com/bwilczynski/unifictl/compare/v0.2.0...v0.2.1) - 2026-10-10
 
 ### Added
