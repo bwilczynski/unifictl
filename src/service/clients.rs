@@ -102,6 +102,7 @@ fn client_to_detail(sta: &Sta, by_mac: &HashMap<String, &Device>) -> NetworkClie
                 } else {
                     None
                 },
+                ..Default::default()
             },
             uptime: Some(sta.uptime),
         })
@@ -144,6 +145,7 @@ fn client_to_detail_v2(c: &ClientV2, by_mac: &HashMap<String, &Device>) -> Netwo
                 device,
                 port: None,
                 link_speed: None,
+                ..Default::default()
             },
             uptime: None,
         })

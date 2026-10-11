@@ -363,8 +363,8 @@ pub(crate) fn controller_service(
 pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> Result<String> {
     match cmd {
         Command::Devices { command } => match command {
-            DevicesCommand::List => emit_list(out, &svc.list_devices()?, |l| {
-                render::devices::list(l, color)
+            DevicesCommand::List { wide } => emit_list(out, &svc.list_devices()?, |l| {
+                render::devices::list(l, *wide, color)
             }),
             DevicesCommand::Get { id, all_ports } => emit(out, &svc.get_device(id)?, |d| {
                 render::devices::get(d, *all_ports, color)
@@ -484,7 +484,7 @@ fn lists_ids(cmd: &Command) -> bool {
     matches!(
         cmd,
         Command::Devices {
-            command: DevicesCommand::List
+            command: DevicesCommand::List { .. }
         } | Command::Clients {
             command: ClientsCommand::List { .. }
                 | ClientsCommand::Traffic(TrafficArgs {

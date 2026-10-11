@@ -123,7 +123,11 @@ pub enum Shell {
 #[derive(Debug, Subcommand)]
 pub enum DevicesCommand {
     /// List devices
-    List,
+    List {
+        /// Show additional columns (MAC, model, firmware, uptime, uplink, traffic)
+        #[arg(long)]
+        wide: bool,
+    },
     /// Show one device
     Get {
         /// Device ID, as shown by `devices list`
