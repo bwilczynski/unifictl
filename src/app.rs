@@ -76,15 +76,8 @@ impl Outcome {
 /// Executes a parsed command.
 pub fn run(cli: Cli) -> Result<Outcome> {
     let env = |k: &str| std::env::var(k).ok();
-    match &cli.command {
-        Command::Version => {
-            return Ok(Outcome::ok(format!(
-                "unifictl {}\n",
-                env!("CARGO_PKG_VERSION")
-            )));
-        }
-        Command::Completions { shell } => return completion::script(*shell).map(Outcome::ok),
-        _ => {}
+    if let Command::Completions { shell } = &cli.command {
+        return completion::script(*shell).map(Outcome::ok);
     }
     if cli.output == OutputFormat::Ids && !lists_ids(&cli.command) {
         return Err(ids_unsupported());
@@ -363,7 +356,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
                         Some(StateFilter::Up) | None => PortState::Up,
                     })
                 },
-                vlan_id: (args.vlan > 0).then_some(args.vlan),
+                vlan_id: args.vlan.map(i64::from),
             };
             emit(out, &svc.list_ports(&filter)?, |l| {
                 render::ports::list_table(l, args.wide, color)
@@ -396,7 +389,6 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
         Command::Logs(_) => unreachable!("logs streams its output from run"),
         Command::Config { .. } => unreachable!("config commands are handled by run"),
         Command::Completions { shell } => completion::script(*shell),
-        Command::Version => Ok(format!("unifictl {}\n", env!("CARGO_PKG_VERSION"))),
     }
 }
 

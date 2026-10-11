@@ -109,8 +109,6 @@ pub enum Command {
         #[arg(value_enum)]
         shell: Shell,
     },
-    /// Print the unifictl version
-    Version,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -177,8 +175,8 @@ pub struct PortsListArgs {
     #[arg(long, value_enum, conflicts_with = "all_ports")]
     pub state: Option<StateFilter>,
     /// Filter to ports carrying this VLAN ID
-    #[arg(long, default_value_t = 0)]
-    pub vlan: i64,
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=4094))]
+    pub vlan: Option<u16>,
     /// Show additional columns (link speed, PoE, LAG, SFP, traffic)
     #[arg(long)]
     pub wide: bool,

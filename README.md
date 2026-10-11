@@ -19,15 +19,14 @@ Install them with [mise](https://mise.jdx.dev); the command is the same on both
 platforms:
 
 ```sh
-mise use -g github:bwilczynski/unifictl          # latest release
-mise use -g github:bwilczynski/unifictl@0.1.0    # or pin a version
+mise use -g github:bwilczynski/unifictl    # latest release
 unifictl --version
 ```
 
 mise picks the archive matching your OS and CPU and puts `unifictl` on your
-`PATH`; `mise upgrade unifictl` moves to a newer release. Nothing else is
-needed on macOS. On Linux the binary needs glibc 2.35 or newer (Arch,
-Ubuntu 22.04+, Debian 12+, Fedora 36+).
+`PATH`; append `@<version>` to pin a release, and `mise upgrade unifictl` moves
+to a newer one. Nothing else is needed on macOS. On Linux the binary needs
+glibc 2.35 or newer (Arch, Ubuntu 22.04+, Debian 12+, Fedora 36+).
 
 ### From source
 
