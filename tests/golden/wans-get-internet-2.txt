@@ -1,7 +1,0 @@
-FIELD   VALUE
-ID      internet-2
-NAME    Internet 2
-IP      
-UPTIME  1h 33m 47s
-STATUS  disconnected
-DNS     

@@ -1,3 +1,0 @@
-ID                NAME        IP           UPTIME      STATUS
-internet-1  Internet 1  203.0.113.1  1h 33m 47s  connected
-internet-2  Internet 2               1h 33m 47s  disconnected

@@ -1,9 +1,0 @@
-FIELD       VALUE
-ID          kindle-paperwhite-bb04
-NAME        Kindle Paperwhite
-MAC         e0:f7:28:aa:bb:04
-IP          192.168.10.37
-CONNECTION  wireless
-STATUS      offline
-AP          UAP-01
-SSID        homelab

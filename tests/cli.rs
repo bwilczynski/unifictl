@@ -212,8 +212,7 @@ mod with_fixtures {
             let ids = stdout(&run(&["-o", "ids", cmd, "list"]));
             assert!(!ids.is_empty(), "{cmd}: no IDs");
             for id in ids.lines() {
-                // Listed but not gettable in the Go implementation too
-                // (tests/golden/clients-get-sonos-one-sl-l-bb03.err).
+                // Listed but not gettable, as in the Go implementation.
                 if id == "sonos-one-sl-l-bb03" {
                     continue;
                 }

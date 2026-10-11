@@ -1,1 +1,0 @@
-{"broadcastIp":"192.168.20.255","dhcpMode":"server","dhcpRange":{"end":"192.168.20.254","start":"192.168.20.6"},"dnsServers":["192.168.20.1"],"gatewayIp":"192.168.20.1","id":"lan-iot","name":"LAN-IOT","subnet":"192.168.20.0/24","vlanId":20}

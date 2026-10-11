@@ -157,24 +157,19 @@ reached.
 
 ## Relationship to hlctl
 
-unifictl is a port of `hlctl network …`
+unifictl started as a port of `hlctl network …`
 ([bwilczynski/homelab-cli](https://github.com/bwilczynski/homelab-cli)) and the
 network domain of [bwilczynski/homelab-api](https://github.com/bwilczynski/homelab-api),
 with its output model taken from
 [bwilczynski/homelab-api-spec](https://github.com/bwilczynski/homelab-api-spec).
-Output is functionally equivalent, except that IDs have no controller prefix,
+It has since diverged. Among other differences, IDs have no controller prefix,
 client IDs end in the last two MAC bytes rather than the first (which same-named
 clients from one vendor share), and there is no `uri` field.
-
-`mise run test` checks that equivalence against golden files in `tests/golden`.
-`mise run golden` regenerates them from the Go code. It needs local clones of
-homelab-api and homelab-cli: by default it looks for them next to this
-repository, or you can point `HOMELAB_API_DIR` and `HOMELAB_CLI_DIR` at them.
 
 ## Develop
 
 ```sh
-mise run test   # unit, CLI and golden tests
+mise run test   # unit and CLI tests
 mise run lint   # clippy + rustfmt
 ```
 
