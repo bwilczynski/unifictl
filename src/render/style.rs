@@ -1,7 +1,9 @@
-//! ANSI colour for status cells and log messages. Only the basic SGR colours are used, so the
+//! ANSI colour for status cells, health metrics, traffic and log messages. Only the basic SGR colours are used, so the
 //! terminal's own palette (e.g. a Catppuccin theme) decides the actual shade.
 
-use crate::model::{AppRef, ClientStatus, DeviceStatus, PortState, WanStatus};
+use super::format::format_link_speed;
+use super::health::{self, Health};
+use crate::model::{AppRef, ClientStatus, DeviceStatus, LinkSpeed, PortState, WanStatus};
 use crate::setup::check::Status;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,6 +14,8 @@ pub enum Paint {
     Yellow,
     Blue,
     BoldBlue,
+    Cyan,
+    Magenta,
     Dim,
 }
 
@@ -24,6 +28,8 @@ impl Paint {
             Self::Yellow => "33",
             Self::Blue => "34",
             Self::BoldBlue => "1;34",
+            Self::Cyan => "36",
+            Self::Magenta => "35",
             Self::Dim => "2",
         }
     }
@@ -36,6 +42,65 @@ pub fn paint(text: &str, p: Paint, on: bool) -> String {
     } else {
         text.to_string()
     }
+}
+
+/// `text` green, yellow or red by `h`.
+pub fn graded(text: &str, h: Health, on: bool) -> String {
+    let p = match h {
+        Health::Good => Paint::Green,
+        Health::Fair => Paint::Yellow,
+        Health::Poor => Paint::Red,
+    };
+    paint(text, p, on)
+}
+
+/// Downloaded / received bytes: cyan, close to UniFi's light blue.
+pub fn down(text: &str, on: bool) -> String {
+    paint(text, Paint::Cyan, on)
+}
+
+/// Uploaded / transmitted bytes: magenta, close to UniFi's purple.
+pub fn up(text: &str, on: bool) -> String {
+    paint(text, Paint::Magenta, on)
+}
+
+fn dash() -> String {
+    "-".to_string()
+}
+
+/// `98%`, graded; `-` when the controller gives no score.
+pub fn experience(pct: Option<i64>, on: bool) -> String {
+    pct.map_or_else(dash, |p| {
+        graded(&format!("{p}%"), health::experience(p), on)
+    })
+}
+
+/// `-69 dBm`, graded; `-` when unknown.
+pub fn signal(dbm: Option<i64>, on: bool) -> String {
+    dbm.map_or_else(dash, |d| graded(&format!("{d} dBm"), health::signal(d), on))
+}
+
+/// A wired client's link speed, graded on absolute speed.
+pub fn wired_speed(speed: Option<LinkSpeed>, on: bool) -> String {
+    speed.map_or_else(dash, |s| {
+        graded(format_link_speed(s), health::wired_link(s), on)
+    })
+}
+
+/// A device uplink's speed, graded against what both ports allow.
+pub fn uplink_speed(
+    speed: Option<LinkSpeed>,
+    max: Option<LinkSpeed>,
+    full_duplex: Option<bool>,
+    on: bool,
+) -> String {
+    speed.map_or_else(dash, |s| {
+        graded(
+            format_link_speed(s),
+            health::uplink(s, max, full_duplex),
+            on,
+        )
+    })
 }
 
 pub fn device_status(s: DeviceStatus, on: bool) -> String {
@@ -181,5 +246,46 @@ mod tests {
     #[test]
     fn bold_red_sgr() {
         assert_eq!(paint("x", Paint::BoldRed, true), "\x1b[1;31mx\x1b[0m");
+    }
+
+    #[test]
+    fn graded_maps_to_traffic_light() {
+        use crate::render::health::Health;
+        assert_eq!(graded("x", Health::Good, true), "\x1b[32mx\x1b[0m");
+        assert_eq!(graded("x", Health::Fair, true), "\x1b[33mx\x1b[0m");
+        assert_eq!(graded("x", Health::Poor, true), "\x1b[31mx\x1b[0m");
+        assert_eq!(graded("x", Health::Poor, false), "x");
+    }
+
+    #[test]
+    fn down_is_cyan_up_is_magenta() {
+        assert_eq!(down("1 KB", true), "\x1b[36m1 KB\x1b[0m");
+        assert_eq!(up("1 KB", true), "\x1b[35m1 KB\x1b[0m");
+        assert_eq!(down("1 KB", false), "1 KB");
+    }
+
+    #[test]
+    fn health_cells() {
+        use crate::model::LinkSpeed;
+        assert_eq!(experience(Some(98), true), "\x1b[32m98%\x1b[0m");
+        assert_eq!(experience(Some(45), false), "45%");
+        assert_eq!(experience(None, true), "-");
+        assert_eq!(signal(Some(-69), true), "\x1b[33m-69 dBm\x1b[0m");
+        assert_eq!(signal(None, true), "-");
+        assert_eq!(
+            wired_speed(Some(LinkSpeed::Fe), true),
+            "\x1b[33m100 Mbps\x1b[0m"
+        );
+        assert_eq!(wired_speed(None, true), "-");
+        assert_eq!(
+            uplink_speed(
+                Some(LinkSpeed::Gbe2p5),
+                Some(LinkSpeed::Gbe2p5),
+                Some(true),
+                true
+            ),
+            "\x1b[32m2.5 GbE\x1b[0m"
+        );
+        assert_eq!(uplink_speed(None, Some(LinkSpeed::Gbe1), None, true), "-");
     }
 }

@@ -13,8 +13,8 @@ pub fn clients(list: &ClientTrafficList, color: bool) -> String {
         t.row(&[
             &c.id,
             &style::name(&c.name, color),
-            &format_bytes(c.bytes_received),
-            &format_bytes(c.bytes_transmitted),
+            &style::down(&format_bytes(c.bytes_received), color),
+            &style::up(&format_bytes(c.bytes_transmitted), color),
             &format_bytes(c.total_bytes),
             &c.top_app
                 .as_ref()
@@ -31,8 +31,8 @@ pub fn client(list: &ClientAppTrafficList, color: bool) -> String {
         t.row(&[
             &style::app_name(&a.app, color),
             &a.app.category.name,
-            &format_bytes(a.bytes_received),
-            &format_bytes(a.bytes_transmitted),
+            &style::down(&format_bytes(a.bytes_received), color),
+            &style::up(&format_bytes(a.bytes_transmitted), color),
             &format_bytes(a.total_bytes),
             &format_uptime(a.activity_seconds),
         ]);
@@ -48,8 +48,8 @@ pub fn apps(list: &AppTrafficList, color: bool) -> String {
             &style::app_name(&a.app, color),
             &a.app.category.name,
             &a.client_count.to_string(),
-            &format_bytes(a.bytes_received),
-            &format_bytes(a.bytes_transmitted),
+            &style::down(&format_bytes(a.bytes_received), color),
+            &style::up(&format_bytes(a.bytes_transmitted), color),
             &format_bytes(a.total_bytes),
         ]);
     }
@@ -165,5 +165,24 @@ Unknown (9:4242)    Unknown (9)               1        1.0 MB    1.0 MB   2.0 MB
     fn names_are_blue_with_color() {
         let out = clients(&svc().clients_traffic(W).unwrap().data, true);
         assert!(out.contains("\x1b[34mMacBook Pro\x1b[0m"), "{out}");
+    }
+
+    #[test]
+    fn down_cyan_up_magenta_total_plain() {
+        let out = clients(&svc().clients_traffic(W).unwrap().data, true);
+        let row = out
+            .lines()
+            .find(|l| l.contains("macbook-pro-0001"))
+            .unwrap();
+        assert!(row.contains("\x1b[36m2.1 GB\x1b[0m"), "{row}");
+        assert!(row.contains("\x1b[35m71.0 MB\x1b[0m"), "{row}");
+        assert!(row.contains("  2.2 GB  "), "TOTAL stays plain: {row}");
+        let one = client(
+            &svc().client_traffic("macbook-pro-0001", W).unwrap().data,
+            true,
+        );
+        assert!(one.contains("\x1b[36m2.0 GB\x1b[0m") && one.contains("\x1b[35m50.0 MB\x1b[0m"));
+        let apps_out = apps(&svc().apps_traffic(W).unwrap().data, true);
+        assert!(apps_out.contains("\x1b[36m") && apps_out.contains("\x1b[35m"));
     }
 }
