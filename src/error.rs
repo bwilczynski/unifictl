@@ -10,6 +10,9 @@ pub enum Error {
     NotFound(String),
     #[error("{0}")]
     Unifi(String),
+    /// The controller refused the credentials; retrying will not help.
+    #[error("{0}")]
+    Auth(String),
     #[error("{0}")]
     Other(String),
 }

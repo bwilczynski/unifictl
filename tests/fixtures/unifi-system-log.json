@@ -1,0 +1,167 @@
+{
+  "data": [
+    {
+      "id": "65f000000000000000000001",
+      "timestamp": 1791460800000,
+      "severity": "VERY_HIGH",
+      "category": "INTERNET_AND_WAN",
+      "subcategory": "INTERNET_OUTAGE_AND_FAILOVER",
+      "event": "NETWORK_WAN_FAILED",
+      "key": "NETWORK_WAN_FAILED_2",
+      "status": "NEW",
+      "title_raw": "{WAN_ID} Internet Down",
+      "message_raw": "Internet connection {WAN_ID} {ISP_NAME} on port {PORT} is down.",
+      "parameters": {
+        "CONSOLE_NAME": {"id": "CGF-01", "name": "CGF-01"},
+        "DEVICE": {"id": "aa:bb:cc:dd:07:01", "name": "CGF-01", "model": "UCGF"},
+        "WAN_ID": {"id": "WAN1", "name": "WAN1"},
+        "ISP_NAME": {"id": "ExampleISP", "name": "ExampleISP"},
+        "PORT": {"id": "5", "name": "5"}
+      }
+    },
+    {
+      "id": "65f000000000000000000002",
+      "timestamp": 1791460920000,
+      "severity": "MEDIUM",
+      "category": "INTERNET_AND_WAN",
+      "subcategory": "INTERNET_OUTAGE_AND_FAILOVER",
+      "event": "NETWORK_WAN_RESTORED",
+      "title_raw": "{WAN_ID} Internet Restored",
+      "message_raw": "Internet connection {WAN_ID} {ISP_NAME} on port {PORT} is restored.",
+      "parameters": {
+        "CONSOLE_NAME": {"id": "CGF-01", "name": "CGF-01"},
+        "DEVICE": {"id": "aa:bb:cc:dd:07:01", "name": "CGF-01"},
+        "WAN_ID": {"id": "WAN1", "name": "WAN1"},
+        "ISP_NAME": {"id": "ExampleISP", "name": "ExampleISP"},
+        "PORT": {"id": 5, "name": 5}
+      }
+    },
+    {
+      "id": "65f000000000000000000003",
+      "timestamp": 1791547200000,
+      "severity": "HIGH",
+      "category": "SECURITY",
+      "subcategory": "SECURITY_INTRUSION_PREVENTION",
+      "event": "THREAT_DETECTED",
+      "title_raw": "Threat Detected",
+      "message_raw": "A network intrusion attempt from {SRC_IP} to {DST_IP} has been detected.",
+      "parameters": {
+        "CONSOLE_NAME": {"id": "CGF-01", "name": "CGF-01"},
+        "DEVICE": {"id": "aa:bb:cc:dd:07:01", "name": "CGF-01"},
+        "SRC_IP": {"id": "192.168.10.67", "name": "192.168.10.67"},
+        "DST_IP": {"id": "198.51.100.7", "name": "198.51.100.7"}
+      }
+    },
+    {
+      "id": "65f000000000000000000004",
+      "timestamp": 1791633600000,
+      "severity": "MEDIUM",
+      "category": "SECURITY",
+      "subcategory": "SECURITY_FIREWALL",
+      "event": "TRAFFIC_BLOCKED",
+      "title_raw": "Blocked by Firewall",
+      "message_raw": "{SRC_CLIENT} was blocked from accessing {DST_IP} by the {TRIGGER} Firewall Policy.",
+      "parameters": {
+        "SRC_CLIENT": {"id": "3c:ee:ee:00:00:01", "name": "MacBook Pro"},
+        "DST_IP": {"id": "192.168.100.5", "name": "192.168.100.5"},
+        "TRIGGER": {"id": "policy-1", "name": "Block IoT to LAN"},
+        "INITIATOR_ID": {"id": "x1"}
+      }
+    },
+    {
+      "id": "65f000000000000000000005",
+      "timestamp": 1791698400000,
+      "severity": "MEDIUM",
+      "category": "AUDIT",
+      "subcategory": "SYSTEM_ADMIN",
+      "event": "MADE_CHANGES_ONE_SETTING_OBJECT",
+      "title_raw": "Config Modified",
+      "message_raw": "{ADMIN} made a change to {SETTING_NAME} in {OBJECT} {SECTION} settings. Source IP: {IP}",
+      "parameters": {
+        "ADMIN": {"id": "admin-1", "name": "Network Application"},
+        "OBJECT": {"id": "aa:bb:cc:dd:02:01", "name": "UAP-02"},
+        "SETTING_NAME": {"id": "setting-1", "name": null},
+        "SECTION": {"id": "section-1"},
+        "ADMIN_ACTIVITY_ID": null
+      }
+    },
+    {
+      "id": "65f000000000000000000006",
+      "timestamp": 1791712800000,
+      "severity": "LOW",
+      "category": "UNIFI_DEVICES",
+      "subcategory": "SYSTEM_WIFI",
+      "event": "AP_CHANGED_CHANNELS",
+      "title_raw": "AP Channel Change",
+      "message_raw": "{DEVICE} moved to channel {CHANNEL} from {PREVIOUS_CHANNEL}.",
+      "parameters": {
+        "DEVICE": {"id": "aa:bb:cc:dd:02:01", "name": "UAP-02"},
+        "CHANNEL": {"id": "aa:bb:cc:dd:02:01", "name": "11"},
+        "PREVIOUS_CHANNEL": {"id": "aa:bb:cc:dd:02:01", "name": "1"}
+      }
+    },
+    {
+      "id": "65f000000000000000000007",
+      "timestamp": 1791716400000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "title_raw": "WiFi Client Roamed",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {"id": "3c:ee:ee:00:00:01", "name": "MacBook Pro", "hostname": "macbook"},
+        "DEVICE_FROM": {"id": "aa:bb:cc:dd:02:01", "name": "UAP-02"},
+        "DEVICE_TO": {"id": "aa:bb:cc:dd:04:01", "name": "UAP-01"},
+        "WIFI_STATS": {"id": "3c:ee:ee:00:00:01", "name": "Ch. 36 (5 GHz, 80 MHz), -60 dBm"},
+        "WLAN": {"id": "wlan-1", "name": "home-wifi"}
+      }
+    },
+    {
+      "id": "65f000000000000000000008",
+      "timestamp": 1791718200000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIRED",
+      "event": "CLIENT_CONNECTED_WIRED",
+      "title_raw": "Wired Client Connected",
+      "message_raw": "{CLIENT} connected to {NETWORK} on {DEVICE_WITH_PORT}. IP: {IP}",
+      "parameters": {
+        "CLIENT": {"id": "68:ee:ee:00:00:02", "name": "nas-1"},
+        "NETWORK": {"id": "net-1", "name": "LAN-SRV"},
+        "DEVICE_WITH_PORT": {"id": "aa:bb:cc:dd:06:01", "name": "US 8 60W Port 3"},
+        "IP": {"id": "68:ee:ee:00:00:02", "name": "192.168.100.5"}
+      }
+    },
+    {
+      "id": "65f000000000000000000009",
+      "timestamp": 1791719400000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_DISCONNECTED_WIRELESS",
+      "title_raw": "WiFi Client Disconnected",
+      "message_raw": "{CLIENT} disconnected from {WLAN}. Last Connected To: {DEVICE}.",
+      "parameters": {
+        "CLIENT": {"id": "a0:ee:ee:00:00:99", "name": "Guest Phone"},
+        "WLAN": {"id": "wlan-2", "name": "home-wifi-iot"},
+        "DEVICE": {"id": "aa:bb:cc:dd:04:01", "name": "UAP-01"}
+      }
+    },
+    {
+      "id": "65f00000000000000000000a",
+      "timestamp": 1791719400000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_CONNECTED",
+      "title_raw": "WiFi Client Connected",
+      "message_raw": "{CLIENT} connected to {WLAN} on {DEVICE}.",
+      "parameters": {
+        "CLIENT": {"id": "3c:ee:ee:00:00:01", "name": "MacBook Pro"},
+        "WLAN": {"id": "wlan-1", "name": "home-wifi"},
+        "DEVICE": {"id": "aa:bb:cc:dd:04:01", "name": "UAP-01"}
+      }
+    }
+  ]
+}
