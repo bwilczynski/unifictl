@@ -329,6 +329,36 @@ pub struct NetworkPortList {
 
 // ---------- clients ----------
 
+/// Live traffic rates from the client's point of view: `rx` is its download.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rates {
+    pub rx_bytes_per_sec: i64,
+    pub tx_bytes_per_sec: i64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WirelessConnection {
+    pub device: DeviceRef,
+    pub ssid: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signal_strength: Option<i64>,
+    /// Wi-Fi PHY rate, Mbps.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_mbps: Option<i64>,
+}
+
+/// Where a client attaches: a switch port or an access point.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum ClientConnection {
+    Wired(Connection),
+    Wireless(WirelessConnection),
+}
+
+/// A client, the same in `clients list` and `clients get`. Live fields are
+/// only set while it is online.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkClient {
@@ -339,58 +369,21 @@ pub struct NetworkClient {
     pub ip: Option<String>,
     pub connection_type: ConnectionType,
     pub status: ClientStatus,
+    pub connected_to: ClientConnection,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub experience: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub traffic: Option<Rates>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uptime: Option<i64>,
+    /// Epoch seconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct NetworkClientList {
     pub items: Vec<NetworkClient>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WiredClientDetail {
-    pub id: String,
-    pub name: String,
-    pub mac: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ip: Option<String>,
-    pub connection_type: ConnectionType,
-    pub status: ClientStatus,
-    pub connected_to: Connection,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub uptime: Option<i64>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WirelessConnection {
-    pub device: DeviceRef,
-    pub ssid: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub signal_strength: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WirelessClientDetail {
-    pub id: String,
-    pub name: String,
-    pub mac: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ip: Option<String>,
-    pub connection_type: ConnectionType,
-    pub status: ClientStatus,
-    pub connected_to: WirelessConnection,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub uptime: Option<i64>,
-}
-
-/// Discriminated on `connectionType`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum NetworkClientDetail {
-    Wired(WiredClientDetail),
-    Wireless(WirelessClientDetail),
 }
 
 // ---------- topology ----------

@@ -146,6 +146,9 @@ pub enum ClientsCommand {
         /// Filter by status
         #[arg(long, value_enum)]
         status: Option<StatusFilter>,
+        /// Show additional columns (MAC, uplink, SSID, signal, link, traffic, uptime, last seen)
+        #[arg(long)]
+        wide: bool,
     },
     /// Show one client
     Get {

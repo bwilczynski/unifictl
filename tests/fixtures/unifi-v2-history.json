@@ -32,7 +32,9 @@
       "uptime": 0,
       "essid": null,
       "signal": null,
-      "last_seen": 1778829796
+      "last_seen": 1778829796,
+      "wired_rate_mbps": 100,
+      "last_uplink_remote_port": 4
     }
   ]
 }
