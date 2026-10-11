@@ -188,12 +188,18 @@ pub struct Connection {
     pub port: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link_speed: Option<LinkSpeed>,
+    /// What both ends of a device uplink allow; not set for clients.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_link_speed: Option<LinkSpeed>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full_duplex: Option<bool>,
 }
 
-/// Fields shared by every `NetworkDeviceDetail` variant.
+/// A device as `devices list` shows it; every `NetworkDeviceDetail` variant
+/// flattens it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DeviceBase {
+pub struct NetworkDevice {
     pub id: String,
     pub name: String,
     pub mac: String,
@@ -204,6 +210,8 @@ pub struct DeviceBase {
     pub model: String,
     pub firmware_version: String,
     pub uptime: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub experience: Option<i64>,
     pub traffic: Traffic,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uplink: Option<Connection>,
@@ -263,14 +271,14 @@ pub struct DevicePort {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SwitchDetail {
     #[serde(flatten)]
-    pub base: DeviceBase,
+    pub base: NetworkDevice,
     pub ports: Vec<DevicePort>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GatewayDetail {
     #[serde(flatten)]
-    pub base: DeviceBase,
+    pub base: NetworkDevice,
     pub ports: Vec<DevicePort>,
     pub wans: Vec<WanRef>,
 }
@@ -287,7 +295,7 @@ pub struct ApClient {
 #[serde(rename_all = "camelCase")]
 pub struct AccessPointDetail {
     #[serde(flatten)]
-    pub base: DeviceBase,
+    pub base: NetworkDevice,
     pub num_clients: i64,
     pub connected_clients: Vec<ApClient>,
 }
@@ -299,18 +307,7 @@ pub enum NetworkDeviceDetail {
     Switch(SwitchDetail),
     AccessPoint(AccessPointDetail),
     Gateway(GatewayDetail),
-    Unknown(DeviceBase),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct NetworkDevice {
-    pub id: String,
-    pub name: String,
-    pub mac: String,
-    pub ip: String,
-    #[serde(rename = "type")]
-    pub device_type: DeviceType,
-    pub status: DeviceStatus,
+    Unknown(NetworkDevice),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -786,7 +783,7 @@ mod tests {
     #[test]
     fn switch_detail_flattens_base() {
         let detail = NetworkDeviceDetail::Switch(SwitchDetail {
-            base: DeviceBase {
+            base: NetworkDevice {
                 id: "us-8".into(),
                 name: "US 8".into(),
                 mac: "aa:bb:cc:dd:01:01".into(),
@@ -796,6 +793,7 @@ mod tests {
                 model: "USC8".into(),
                 firmware_version: "1.0".into(),
                 uptime: 5,
+                experience: None,
                 traffic: traffic(),
                 uplink: None,
             },
@@ -806,6 +804,7 @@ mod tests {
         assert_eq!(v["firmwareVersion"], "1.0");
         assert_eq!(v["ports"], json!([]));
         assert!(v.get("uplink").is_none());
+        assert!(v.get("experience").is_none(), "absent score is omitted");
         assert!(v.get("uri").is_none());
     }
 

@@ -65,6 +65,8 @@ pub struct Device {
     pub tx_bytes: i64,
     #[serde(deserialize_with = "nd")]
     pub rx_bytes: i64,
+    /// Experience score 0–100; -1 (or absent) when the device has none.
+    pub satisfaction: Option<i64>,
     #[serde(deserialize_with = "nd")]
     pub port_table: Vec<PortEntry>,
     #[serde(deserialize_with = "nd")]
@@ -96,6 +98,9 @@ pub struct PortEntry {
     pub up: bool,
     #[serde(deserialize_with = "nd")]
     pub speed: i64,
+    /// The port's maximum: "FE", "GE", "2.5GE"/"2P5GE", "10GE", "SFP+", …
+    #[serde(deserialize_with = "nd")]
+    pub media: String,
     #[serde(deserialize_with = "nd")]
     pub port_poe: bool,
     #[serde(deserialize_with = "nd")]
@@ -136,6 +141,9 @@ pub struct Uplink {
     pub port_idx: Option<i64>,
     #[serde(deserialize_with = "nd")]
     pub speed: i64,
+    /// This device's uplink port maximum, Mbps.
+    pub max_speed: Option<i64>,
+    pub full_duplex: Option<bool>,
     #[serde(rename = "tx_bytes-r", deserialize_with = "nd")]
     pub tx_bytes_r: f64,
     #[serde(rename = "rx_bytes-r", deserialize_with = "nd")]
@@ -504,5 +512,15 @@ mod tests {
                 name: "X".into()
             }]
         );
+    }
+
+    #[test]
+    fn satisfaction_null_or_missing_is_none() {
+        let d: Device = serde_json::from_str(r#"{"satisfaction": null}"#).unwrap();
+        assert_eq!(d.satisfaction, None);
+        let d: Device = serde_json::from_str("{}").unwrap();
+        assert_eq!(d.satisfaction, None);
+        let d: Device = serde_json::from_str(r#"{"satisfaction": 93}"#).unwrap();
+        assert_eq!(d.satisfaction, Some(93));
     }
 }

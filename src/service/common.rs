@@ -142,6 +142,18 @@ pub(crate) fn map_link_speed(mbps: i64) -> Option<LinkSpeed> {
     }
 }
 
+/// A port's `media` → its maximum speed; unknown media → `None`.
+pub(crate) fn map_port_media(media: &str) -> Option<LinkSpeed> {
+    match media {
+        "FE" => Some(LinkSpeed::Fe),
+        "GE" | "SFP" => Some(LinkSpeed::Gbe1),
+        "2.5GE" | "2P5GE" => Some(LinkSpeed::Gbe2p5),
+        "5GE" => Some(LinkSpeed::Gbe5),
+        "10GE" | "SFP+" => Some(LinkSpeed::Gbe10),
+        _ => None,
+    }
+}
+
 pub(crate) fn map_connection_type(is_wired: bool) -> ConnectionType {
     if is_wired {
         ConnectionType::Wired

@@ -67,7 +67,9 @@ impl<'a> PortIndex<'a> {
 
 impl Service {
     pub fn list_devices(&self) -> Result<NetworkDeviceList> {
-        let items = self.api.devices()?.iter().map(device_to_list).collect();
+        let devices = self.api.devices()?;
+        let by_mac = mac_to_device(&devices);
+        let items = devices.iter().map(|d| network_device(d, &by_mac)).collect();
         Ok(NetworkDeviceList { items })
     }
 
@@ -86,46 +88,45 @@ impl Service {
     }
 }
 
-fn device_to_list(d: &Device) -> NetworkDevice {
+fn build_device_detail(d: &Device, idx: &PortIndex, confs: &[NetworkConf]) -> NetworkDeviceDetail {
+    match d.kind.as_str() {
+        "usw" => NetworkDeviceDetail::Switch(SwitchDetail {
+            base: network_device(d, &idx.by_mac),
+            ports: build_device_ports(d, &d.port_table, idx, confs),
+        }),
+        "uap" => NetworkDeviceDetail::AccessPoint(build_ap_detail(d, idx)),
+        t if is_gateway_type(t) => NetworkDeviceDetail::Gateway(GatewayDetail {
+            base: network_device(d, &idx.by_mac),
+            ports: build_gateway_ports(d, idx, confs),
+            wans: gateway_wan_refs(confs),
+        }),
+        _ => NetworkDeviceDetail::Unknown(network_device(d, &idx.by_mac)),
+    }
+}
+
+/// The fields every device view shares. The gateway has no upstream device.
+fn network_device(d: &Device, by_mac: &HashMap<String, &Device>) -> NetworkDevice {
+    let device_type = map_device_type(&d.kind);
+    let status = map_device_status(d.state);
+    let uplink = if device_type == DeviceType::Gateway {
+        None
+    } else {
+        device_uplink(d, by_mac)
+    };
     NetworkDevice {
         id: to_kebab(&d.name),
         name: d.name.clone(),
         mac: normalize_mac(&d.mac),
         ip: d.ip.clone(),
-        device_type: map_device_type(&d.kind),
-        status: map_device_status(d.state),
-    }
-}
-
-fn build_device_detail(d: &Device, idx: &PortIndex, confs: &[NetworkConf]) -> NetworkDeviceDetail {
-    match d.kind.as_str() {
-        "usw" => NetworkDeviceDetail::Switch(SwitchDetail {
-            base: device_base(d, DeviceType::Switch, device_uplink(d, idx)),
-            ports: build_device_ports(d, &d.port_table, idx, confs),
-        }),
-        "uap" => NetworkDeviceDetail::AccessPoint(build_ap_detail(d, idx)),
-        t if is_gateway_type(t) => NetworkDeviceDetail::Gateway(GatewayDetail {
-            base: device_base(d, DeviceType::Gateway, None),
-            ports: build_gateway_ports(d, idx, confs),
-            wans: gateway_wan_refs(confs),
-        }),
-        _ => {
-            NetworkDeviceDetail::Unknown(device_base(d, DeviceType::Unknown, device_uplink(d, idx)))
-        }
-    }
-}
-
-fn device_base(d: &Device, device_type: DeviceType, uplink: Option<Connection>) -> DeviceBase {
-    DeviceBase {
-        id: to_kebab(&d.name),
-        name: d.name.clone(),
-        mac: normalize_mac(&d.mac),
-        ip: d.ip.clone(),
         device_type,
-        status: map_device_status(d.state),
+        status,
         model: d.model.clone(),
         firmware_version: d.version.clone(),
         uptime: d.uptime,
+        // A disconnected device's last score is stale.
+        experience: d
+            .satisfaction
+            .filter(|s| *s >= 0 && status == DeviceStatus::Connected),
         traffic: device_traffic(d),
         uplink,
     }
@@ -146,7 +147,7 @@ fn build_ap_detail(d: &Device, idx: &PortIndex) -> AccessPointDetail {
         })
         .collect();
     AccessPointDetail {
-        base: device_base(d, DeviceType::AccessPoint, device_uplink(d, idx)),
+        base: network_device(d, &idx.by_mac),
         num_clients: connected_clients.len() as i64,
         connected_clients,
     }
@@ -370,9 +371,14 @@ fn device_traffic(d: &Device) -> Traffic {
     }
 }
 
-fn device_uplink(d: &Device, idx: &PortIndex) -> Option<Connection> {
+fn device_uplink(d: &Device, by_mac: &HashMap<String, &Device>) -> Option<Connection> {
     let up = d.uplink.as_ref().filter(|u| !u.uplink_mac.is_empty())?;
-    let upstream = idx.by_mac.get(&normalize_mac(&up.uplink_mac))?;
+    let upstream = by_mac.get(&normalize_mac(&up.uplink_mac))?;
+    let remote_max = up
+        .uplink_remote_port
+        .and_then(|port| upstream.port_table.iter().find(|p| p.port_idx == port))
+        .and_then(|p| map_port_media(&p.media));
+    let own_max = up.max_speed.and_then(map_link_speed);
     Some(Connection {
         device: device_ref(upstream),
         port: up.uplink_remote_port,
@@ -381,7 +387,17 @@ fn device_uplink(d: &Device, idx: &PortIndex) -> Option<Connection> {
         } else {
             None
         },
+        max_link_speed: effective_max(own_max, remote_max),
+        full_duplex: up.full_duplex,
     })
+}
+
+/// The slower of the two ports' maxima, or whichever one is known.
+fn effective_max(a: Option<LinkSpeed>, b: Option<LinkSpeed>) -> Option<LinkSpeed> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(if a.mbps() <= b.mbps() { a } else { b }),
+        (a, b) => a.or(b),
+    }
 }
 
 #[cfg(test)]
@@ -891,5 +907,104 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(lag_membership(&none, &masters), None);
+    }
+
+    #[test]
+    fn list_devices_carries_experience_and_uplink() {
+        let items = svc(fixtures()).list_devices().unwrap().items;
+        let by_id = |id: &str| items.iter().find(|d| d.id == id).unwrap();
+        assert_eq!(by_id("uap-01").experience, Some(98));
+        assert_eq!(by_id("us-8").experience, Some(72));
+        assert_eq!(by_id("switch-flex-mini").experience, None, "-1 means none");
+        assert_eq!(by_id("uap-01").model, "U7LT");
+        assert!(
+            by_id("cgf-01").uplink.is_none(),
+            "gateway has no upstream device"
+        );
+        assert_eq!(
+            by_id("cgf-01").traffic.rx_bytes_per_sec,
+            946,
+            "gateway rates are WAN rates"
+        );
+
+        let ap = by_id("uap-01").uplink.as_ref().unwrap();
+        assert_eq!(ap.device.id, "us-8-60w");
+        assert_eq!(ap.port, Some(5));
+        assert_eq!(ap.link_speed, Some(LinkSpeed::Fe));
+        assert_eq!(ap.max_link_speed, Some(LinkSpeed::Gbe1));
+        assert_eq!(ap.full_duplex, Some(true));
+
+        let flex = by_id("usw-flex-2-5g-8").uplink.as_ref().unwrap();
+        assert_eq!(flex.link_speed, Some(LinkSpeed::Gbe2p5));
+        assert_eq!(
+            flex.max_link_speed,
+            Some(LinkSpeed::Gbe2p5),
+            "own port 10G, upstream port 2.5G"
+        );
+        assert_eq!(
+            by_id("switch-flex-mini")
+                .uplink
+                .as_ref()
+                .unwrap()
+                .full_duplex,
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn list_item_is_the_detail_base() {
+        let s = svc(fixtures());
+        let items = s.list_devices().unwrap().items;
+        for d in &items {
+            let base = match s.get_device(&d.id).unwrap() {
+                NetworkDeviceDetail::Switch(x) => x.base,
+                NetworkDeviceDetail::Gateway(x) => x.base,
+                NetworkDeviceDetail::AccessPoint(x) => x.base,
+                NetworkDeviceDetail::Unknown(x) => x,
+            };
+            assert_eq!(&base, d, "{}", d.id);
+        }
+    }
+
+    #[test]
+    fn effective_max_unknown_media_uses_own_max() {
+        let mut api = fixtures();
+        for d in &mut api.devices {
+            for p in &mut d.port_table {
+                p.media = "SFP28".into();
+            }
+        }
+        let items = svc(api).list_devices().unwrap().items;
+        let flex = items.iter().find(|d| d.id == "usw-flex-2-5g-8").unwrap();
+        assert_eq!(
+            flex.uplink.as_ref().unwrap().max_link_speed,
+            Some(LinkSpeed::Gbe10)
+        );
+    }
+
+    #[test]
+    fn port_media_maps_to_speed() {
+        assert_eq!(map_port_media("FE"), Some(LinkSpeed::Fe));
+        assert_eq!(map_port_media("GE"), Some(LinkSpeed::Gbe1));
+        assert_eq!(map_port_media("2.5GE"), Some(LinkSpeed::Gbe2p5));
+        assert_eq!(map_port_media("2P5GE"), Some(LinkSpeed::Gbe2p5));
+        assert_eq!(map_port_media("10GE"), Some(LinkSpeed::Gbe10));
+        assert_eq!(map_port_media("SFP+"), Some(LinkSpeed::Gbe10));
+        assert_eq!(map_port_media("SFP28"), None);
+        assert_eq!(map_port_media(""), None);
+    }
+
+    #[test]
+    fn disconnected_device_has_no_experience() {
+        let mut api = fixtures();
+        api.devices
+            .iter_mut()
+            .find(|d| d.name == "UAP-01")
+            .unwrap()
+            .state = 0;
+        let items = svc(api).list_devices().unwrap().items;
+        let ap = items.iter().find(|d| d.id == "uap-01").unwrap();
+        assert_eq!(ap.status, DeviceStatus::Disconnected);
+        assert_eq!(ap.experience, None, "a stale score is not live");
     }
 }
