@@ -374,6 +374,81 @@ pub struct LogQuery {
     pub page_number: i64,
 }
 
+/// `/v2/api/site/{site}/traffic`: traffic per client and application over a
+/// window, and the same per application across the site.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct TrafficReport {
+    #[serde(deserialize_with = "nd")]
+    pub client_usage_by_app: Vec<ClientUsage>,
+    #[serde(deserialize_with = "nd")]
+    pub total_usage_by_app: Vec<AppUsage>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct ClientUsage {
+    #[serde(deserialize_with = "nd")]
+    pub client: TrafficClient,
+    #[serde(deserialize_with = "nd")]
+    pub usage_by_app: Vec<AppUsage>,
+}
+
+/// The client a traffic entry belongs to; `name` may be empty.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct TrafficClient {
+    #[serde(deserialize_with = "nd")]
+    pub mac: String,
+    pub name: Option<String>,
+    pub hostname: Option<String>,
+    #[serde(deserialize_with = "nd")]
+    pub is_wired: bool,
+}
+
+/// Traffic of one DPI application. `bytes_received` is download from the
+/// client's point of view. `activity_seconds` is set per client,
+/// `client_count` in the site totals.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct AppUsage {
+    #[serde(deserialize_with = "nd")]
+    pub category: i64,
+    #[serde(deserialize_with = "nd")]
+    pub application: i64,
+    #[serde(deserialize_with = "nd")]
+    pub bytes_received: i64,
+    #[serde(deserialize_with = "nd")]
+    pub bytes_transmitted: i64,
+    #[serde(deserialize_with = "nd")]
+    pub total_bytes: i64,
+    #[serde(deserialize_with = "nd")]
+    pub activity_seconds: i64,
+    #[serde(deserialize_with = "nd")]
+    pub client_count: i64,
+}
+
+/// One page of an Integration API list.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct DpiPage {
+    #[serde(rename = "totalCount", deserialize_with = "nd")]
+    pub total_count: i64,
+    #[serde(deserialize_with = "nd")]
+    pub data: Vec<DpiEntry>,
+}
+
+/// A DPI category (`id` = traffic `category`) or application
+/// (`id` = `category << 16 | application`).
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct DpiEntry {
+    #[serde(deserialize_with = "nd")]
+    pub id: i64,
+    #[serde(deserialize_with = "nd")]
+    pub name: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -405,5 +480,29 @@ mod tests {
         let e: Envelope<Vec<Device>> =
             serde_json::from_str(r#"{"meta":{"rc":"ok"},"data":null}"#).unwrap();
         assert!(e.data.is_empty());
+    }
+
+    #[test]
+    fn traffic_report_tolerates_nulls_and_missing_keys() {
+        let r: TrafficReport = serde_json::from_str(
+            r#"{"client_usage_by_app": [{"client": {"mac": "aa", "name": null, "is_wired": null},
+                "usage_by_app": null}], "total_usage_by_app": null}"#,
+        )
+        .unwrap();
+        assert_eq!(r.client_usage_by_app.len(), 1);
+        assert_eq!(r.client_usage_by_app[0].client.name, None);
+        assert!(!r.client_usage_by_app[0].client.is_wired);
+        assert!(r.client_usage_by_app[0].usage_by_app.is_empty());
+        assert!(r.total_usage_by_app.is_empty());
+        let p: DpiPage =
+            serde_json::from_str(r#"{"totalCount": 2, "data": [{"id": 1, "name": "X"}]}"#).unwrap();
+        assert_eq!(p.total_count, 2);
+        assert_eq!(
+            p.data,
+            vec![DpiEntry {
+                id: 1,
+                name: "X".into()
+            }]
+        );
     }
 }

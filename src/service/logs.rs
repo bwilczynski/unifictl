@@ -669,7 +669,8 @@ mod tests {
 
     use crate::unifi::UnifiApi;
     use crate::unifi::types::{
-        ClientV2, Device, LogQuery, NetworkConf, Sta, SystemLogPage, WlanConf,
+        ClientV2, Device, DpiEntry, LogQuery, NetworkConf, Sta, SystemLogPage, TrafficReport,
+        WlanConf,
     };
 
     fn ids(page: &LogPage) -> Vec<&str> {
@@ -860,6 +861,15 @@ mod tests {
                 data: all.iter().skip(start).take(2).cloned().collect(),
                 total_page_count: (all.len() + 1).div_ceil(2) as i64,
             })
+        }
+        fn traffic(&self, start_ms: i64, end_ms: i64) -> Result<TrafficReport> {
+            self.inner.traffic(start_ms, end_ms)
+        }
+        fn dpi_categories(&self) -> Result<Vec<DpiEntry>> {
+            self.inner.dpi_categories()
+        }
+        fn dpi_applications(&self) -> Result<Vec<DpiEntry>> {
+            self.inner.dpi_applications()
         }
     }
 

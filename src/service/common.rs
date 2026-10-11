@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::model::{
     ClientRef, ConnectionType, DeviceRef, DeviceStatus, DeviceType, LinkSpeed, PoeMode, PortState,
 };
-use crate::unifi::types::{ClientV2, Device, Sta};
+use crate::unifi::types::{ClientV2, Device, Sta, TrafficClient};
 
 /// Lowercase, runs of anything but `[a-z0-9]` → `-`, trimmed of `-`.
 pub(crate) fn to_kebab(name: &str) -> String {
@@ -80,6 +80,20 @@ pub(crate) fn client_id_v2(c: &ClientV2) -> String {
         "{}-{}",
         to_kebab(&client_name_v2(c)),
         mac_hex_suffix(&normalize_mac(&c.mac), &c.id)
+    )
+}
+
+/// Alias, then hostname, then MAC, for a client in a traffic report.
+pub(crate) fn client_name_traffic(c: &TrafficClient) -> String {
+    first_non_empty([c.name.as_ref(), c.hostname.as_ref()], &c.mac)
+}
+
+/// Client ID for a traffic report client, matching `clients list`.
+pub(crate) fn client_id_traffic(c: &TrafficClient) -> String {
+    format!(
+        "{}-{}",
+        to_kebab(&client_name_traffic(c)),
+        mac_hex_suffix(&normalize_mac(&c.mac), "")
     )
 }
 

@@ -12,13 +12,21 @@ use serde_json::json;
 
 use super::UnifiApi;
 use super::types::{
-    ClientV2, Device, Envelope, LogQuery, NetworkConf, Site, Sta, SystemLogPage, WlanConf,
+    ClientV2, Device, DpiEntry, DpiPage, Envelope, LogQuery, NetworkConf, Site, Sta, SystemLogPage,
+    TrafficReport, WlanConf,
 };
 use crate::cache::Cache;
 use crate::config::{Auth, Config};
 use crate::error::{Error, Result};
 
 const TIMEOUT: Duration = Duration::from_secs(30);
+/// Entries per Integration API page; the controller accepts 200.
+const DPI_PAGE: i64 = 200;
+/// Upper bound on catalogue pages (2112 applications need 11), against a
+/// nonsensical `totalCount`.
+const MAX_DPI_PAGES: usize = 50;
+/// The DPI catalogue only changes with controller updates.
+const CATALOGUE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub struct UnifiClient {
     base_url: String,
@@ -225,17 +233,57 @@ impl UnifiClient {
     /// parse are cached.
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         let url = format!("{}{}{}", self.base_url, self.prefix(), path);
-        let cached = self.cache.as_ref().and_then(|c| c.get(&url));
+        self.get_url(&url, None)
+    }
+
+    /// GET `url`, from the cache when younger than `max_age` (default: the
+    /// cache TTL).
+    fn get_url<T: DeserializeOwned>(&self, url: &str, max_age: Option<Duration>) -> Result<T> {
+        let cached = self.cache.as_ref().and_then(|c| match max_age {
+            Some(age) => c.get_within(url, age),
+            None => c.get(url),
+        });
         if let Some(value) = cached.and_then(|body| serde_json::from_str(&body).ok()) {
             return Ok(value);
         }
-        let body = self.fetch(&url)?;
+        let body = self.fetch(url)?;
         let value = serde_json::from_str(&body)
             .map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))?;
         if let Some(cache) = &self.cache {
-            cache.put(&url, &body);
+            cache.put(url, &body);
         }
         Ok(value)
+    }
+
+    /// Every entry of an Integration API list under `/v1/{path}`: the first
+    /// page gives the total, the rest are read in parallel. API key only.
+    fn dpi_list(&self, path: &str) -> Result<Vec<DpiEntry>> {
+        if !matches!(self.auth, Auth::ApiKey(_)) {
+            return Err(Error::Unifi("needs an API key".into()));
+        }
+        let page = |offset: i64| -> Result<DpiPage> {
+            let url = format!(
+                "{}/proxy/network/integration/v1/{path}?offset={offset}&limit={DPI_PAGE}",
+                self.base_url
+            );
+            self.get_url(&url, Some(CATALOGUE_TTL))
+        };
+        let page = &page;
+        let first = page(0)?;
+        let offsets: Vec<i64> = (1..MAX_DPI_PAGES as i64)
+            .map(|n| n * DPI_PAGE)
+            .take_while(|&o| o < first.total_count)
+            .collect();
+        let rest = std::thread::scope(|s| {
+            let handles: Vec<_> = offsets.iter().map(|&o| s.spawn(move || page(o))).collect();
+            handles
+                .into_iter()
+                .map(super::joined)
+                .collect::<Result<Vec<_>>>()
+        })?;
+        let mut all = first.data;
+        all.extend(rest.into_iter().flat_map(|p| p.data));
+        Ok(all)
     }
 
     /// GET `url` and return the body; see [`Self::fetch_with`].
@@ -326,6 +374,26 @@ impl UnifiApi for UnifiClient {
         );
         let body = self.fetch_with(|| self.post_request(&url, query))?;
         serde_json::from_str(&body).map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))
+    }
+
+    /// Never cached: every window is its own URL, so entries would pile up.
+    fn traffic(&self, start_ms: i64, end_ms: i64) -> Result<TrafficReport> {
+        let url = format!(
+            "{}{}/v2/api/site/{}/traffic?start={start_ms}&end={end_ms}&includeUnidentified=true",
+            self.base_url,
+            self.prefix(),
+            self.site
+        );
+        let body = self.fetch(&url)?;
+        serde_json::from_str(&body).map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))
+    }
+
+    fn dpi_categories(&self) -> Result<Vec<DpiEntry>> {
+        self.dpi_list("dpi/categories")
+    }
+
+    fn dpi_applications(&self) -> Result<Vec<DpiEntry>> {
+        self.dpi_list("dpi/applications")
     }
 }
 
@@ -1020,5 +1088,192 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, Error::Unifi(_)), "{err:?}");
         assert_eq!(err.to_string(), "unifi request: status 503");
+    }
+
+    #[test]
+    fn traffic_sends_window_and_decodes() {
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/v2/api/site/default/traffic")
+                .query_param("start", "1000")
+                .query_param("end", "2000")
+                .query_param("includeUnidentified", "true");
+            then.status(200).json_body(json!({
+                "client_usage_by_app": [{"client": {"mac": "aa"}, "usage_by_app": [{"category": 4, "application": 1, "total_bytes": 9}]}],
+                "total_usage_by_app": []
+            }));
+        });
+        let r = api_key_client(&server).traffic(1000, 2000).unwrap();
+        m.assert();
+        assert_eq!(r.client_usage_by_app[0].usage_by_app[0].total_bytes, 9);
+    }
+
+    #[test]
+    fn dpi_reads_every_page() {
+        let server = MockServer::start();
+        let page = |offset: i64, ids: std::ops::Range<i64>| {
+            let data: Vec<_> = ids
+                .map(|i| json!({"id": i, "name": format!("App {i}")}))
+                .collect();
+            json!({"offset": offset, "limit": 200, "count": data.len(), "totalCount": 450, "data": data})
+        };
+        let mocks: Vec<_> = [(0, 0..200), (200, 200..400), (400, 400..450)]
+            .into_iter()
+            .map(|(offset, ids)| {
+                let body = page(offset, ids);
+                server.mock(move |when, then| {
+                    when.method(GET)
+                        .path("/proxy/network/integration/v1/dpi/applications")
+                        .header("X-API-KEY", "k")
+                        .query_param("offset", offset.to_string())
+                        .query_param("limit", "200");
+                    then.status(200).json_body(body);
+                })
+            })
+            .collect();
+        let apps = api_key_client(&server).dpi_applications().unwrap();
+        for m in &mocks {
+            m.assert();
+        }
+        assert_eq!(apps.len(), 450);
+        assert_eq!(apps[0].id, 0);
+        assert_eq!(apps[449].name, "App 449");
+    }
+
+    #[test]
+    fn dpi_categories_use_their_own_path() {
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/integration/v1/dpi/categories")
+                .query_param("offset", "0");
+            then.status(200).json_body(
+                json!({"totalCount": 1, "data": [{"id": 4, "name": "Media streaming services"}]}),
+            );
+        });
+        let cats = api_key_client(&server).dpi_categories().unwrap();
+        m.assert();
+        assert_eq!(
+            cats,
+            vec![DpiEntry {
+                id: 4,
+                name: "Media streaming services".into()
+            }]
+        );
+    }
+
+    #[test]
+    fn dpi_paging_is_capped() {
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/integration/v1/dpi/applications");
+            then.status(200)
+                .json_body(json!({"totalCount": 1_000_000_000_i64, "data": []}));
+        });
+        api_key_client(&server).dpi_applications().unwrap();
+        m.assert_calls(MAX_DPI_PAGES);
+    }
+
+    #[test]
+    fn session_auth_has_no_catalogue() {
+        let server = MockServer::start();
+        let any = server.mock(|when, then| {
+            when.any_request();
+            then.status(200).json_body(json!({}));
+        });
+        let err = session_client(&server).dpi_categories().unwrap_err();
+        assert!(err.to_string().contains("needs an API key"), "{err}");
+        assert!(session_client(&server).dpi_applications().is_err());
+        any.assert_calls(0);
+    }
+
+    #[test]
+    fn dpi_catalogue_is_cached_for_a_day() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/integration/v1/dpi/categories");
+            then.status(200)
+                .json_body(json!({"totalCount": 1, "data": [{"id": 0, "name": "IM"}]}));
+        });
+        let client = || {
+            api_key_client(&server).with_cache(Cache::new(
+                dir.path().join("c"),
+                Duration::from_secs(5),
+                true,
+            ))
+        };
+        client().dpi_categories().unwrap();
+        // Older than the 5 s response TTL, younger than a day.
+        for entry in std::fs::read_dir(dir.path().join("c")).unwrap() {
+            let f = std::fs::File::options()
+                .write(true)
+                .open(entry.unwrap().path())
+                .unwrap();
+            f.set_modified(std::time::SystemTime::now() - Duration::from_secs(60))
+                .unwrap();
+        }
+        client().dpi_categories().unwrap();
+        m.assert_calls(1);
+    }
+
+    #[test]
+    fn traffic_is_never_cached() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/v2/api/site/default/traffic");
+            then.status(200).json_body(json!({}));
+        });
+        let client = api_key_client(&server).with_cache(Cache::new(
+            dir.path().join("c"),
+            Duration::from_secs(60),
+            true,
+        ));
+        client.traffic(0, 60_000).unwrap();
+        client.traffic(0, 60_000).unwrap();
+        m.assert_calls(2);
+    }
+
+    #[test]
+    fn catalogue_failure_reason_reaches_the_view() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/v2/api/site/default/traffic");
+            then.status(200).json_body(json!({}));
+        });
+        server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/integration/v1/dpi/categories");
+            then.status(404);
+        });
+        server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/integration/v1/dpi/applications");
+            then.status(200)
+                .json_body(json!({"totalCount": 0, "data": []}));
+        });
+        for list in ["active", "history"] {
+            server.mock(|when, then| {
+                when.method(GET)
+                    .path(format!("/proxy/network/v2/api/site/default/clients/{list}"));
+                then.status(200).json_body(json!([]));
+            });
+        }
+        let svc = crate::service::Service::new(Box::new(api_key_client(&server)), 30);
+        let w = crate::service::TrafficWindow {
+            start_ms: 0,
+            end_ms: 60_000,
+        };
+        let v = svc.apps_traffic(w).unwrap();
+        assert_eq!(
+            v.names_unavailable.as_deref(),
+            Some("unifi request: status 404")
+        );
     }
 }

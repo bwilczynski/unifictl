@@ -1,0 +1,9 @@
+{
+  "offset": 0, "limit": 200, "count": 4, "totalCount": 4,
+  "data": [
+    {"id": 0, "name": "Instant messengers"},
+    {"id": 4, "name": "Media streaming services"},
+    {"id": 13, "name": "Web services"},
+    {"id": 255, "name": "Unknown"}
+  ]
+}

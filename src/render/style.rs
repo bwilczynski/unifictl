@@ -1,7 +1,7 @@
 //! ANSI colour for status cells and log messages. Only the basic SGR colours are used, so the
 //! terminal's own palette (e.g. a Catppuccin theme) decides the actual shade.
 
-use crate::model::{ClientStatus, DeviceStatus, PortState, WanStatus};
+use crate::model::{AppRef, ClientStatus, DeviceStatus, PortState, WanStatus};
 use crate::setup::check::Status;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +76,16 @@ pub fn port_state(s: PortState, on: bool) -> String {
 /// A name, blue like file names in `eza`.
 pub fn name(text: &str, on: bool) -> String {
     paint(text, Paint::Blue, on)
+}
+
+/// An application name: blue like other names, dim when it is a fallback
+/// (`Unknown (…)`, `Unidentified`) so unnamed traffic recedes.
+pub fn app_name(app: &AppRef, on: bool) -> String {
+    paint(
+        &app.name,
+        if app.named { Paint::Blue } else { Paint::Dim },
+        on,
+    )
 }
 
 /// A device name in `topology`, bold so devices stand out from clients.

@@ -84,15 +84,15 @@ so a `list` followed by a few `get`s asks the controller once. Pass
 
 ```
 unifictl devices list | get <id> [--all-ports]
-unifictl clients list [--status online|offline] | get <id>
+unifictl clients list [--status online|offline] | get <id> | traffic [<id> | --by-app] [-S WHEN] [-U WHEN]
 unifictl topology [--include-clients] [--include-wireless]
 unifictl ports list [--device ID] [--mode trunk|access] [--state up|down|disabled | --all-ports] [--vlan N] [--wide]
 unifictl vlans|ssids|wans list | get <id>
 unifictl logs [-n N] [-S WHEN] [-U WHEN] [-p LEVEL] [-r] [-f] [--category CAT] [--device ID] [--client ID]
 ```
 
-Every command takes `-o json` and `--refresh`. `devices`, `clients`, `vlans`, `ssids` and `wans list`
-also take `-o ids`, printing one ID per line for scripts (`unifictl clients list --status offline -o ids | xargs -n1 unifictl clients get`).
+Every command takes `-o json` and `--refresh`. `devices`, `clients`, `vlans`, `ssids` and `wans list`,
+and `clients traffic`, also take `-o ids`, printing one ID per line for scripts (`unifictl clients list --status offline -o ids | xargs -n1 unifictl clients get`).
 IDs are kebab-case names (`us-8-60w`); clients add the last two MAC bytes (`nas-1-0002`).
 
 On a terminal, status cells are coloured (green healthy, red disconnected, dim
@@ -105,6 +105,24 @@ config. Then the whole network as a tree, with the wireless clients under the
 access point each one is on.
 
 ![unifictl devices list, then unifictl devices get switch-core --all-ports, then unifictl topology --include-wireless](docs/demo/devices.gif)
+
+### Traffic
+
+`unifictl clients traffic` shows how much each client used the internet over
+the last 24 hours, largest first, with the application that took the most.
+Give a client ID for its traffic by application, or `--by-app` for the whole
+site:
+
+```sh
+$ unifictl clients traffic macbook-pro-0001 --since today
+APP                 CATEGORY                  DOWN      UP       TOTAL     ACTIVE
+Example Video       Media streaming services  2.0 GB    50.0 MB  2.0 GB    1h 30m 0s
+Facebook Messenger  Instant messengers        100.0 MB  20.0 MB  120.0 MB  30m 0s
+```
+
+`-S`/`--since` and `-U`/`--until` take the same forms as `logs`. Application
+names come from the controller's DPI catalogue, which UniFi OS serves only to
+an API key; with a username and password they show as `Unknown (category:app)`.
 
 ### Logs
 

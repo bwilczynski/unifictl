@@ -100,6 +100,14 @@ mod with_fixtures {
     }
 
     #[test]
+    fn traffic_client_ids_complete() {
+        assert_eq!(ids(&["clients", "traffic", "nas"]), ["nas-1-0002"]);
+        let all = ids(&["clients", "traffic", ""]);
+        assert!(all.contains(&"macbook-pro-0001".to_owned()), "{all:?}");
+        assert!(!all.contains(&"list".to_owned()), "{all:?}");
+    }
+
+    #[test]
     fn lookup_ids_complete_per_kind() {
         assert_eq!(
             ids(&["vlans", "get", ""]),

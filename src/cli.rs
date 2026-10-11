@@ -149,12 +149,30 @@ pub enum ClientsCommand {
         #[arg(add = ArgValueCandidates::new(completion::clients))]
         id: String,
     },
+    /// Internet traffic per client, or by application
+    Traffic(TrafficArgs),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum StatusFilter {
     Online,
     Offline,
+}
+
+#[derive(Debug, Args)]
+pub struct TrafficArgs {
+    /// Client ID: its traffic by application
+    #[arg(add = ArgValueCandidates::new(completion::clients), conflicts_with = "by_app")]
+    pub id: Option<String>,
+    /// Traffic by application across the site
+    #[arg(long)]
+    pub by_app: bool,
+    /// Traffic at or after WHEN [default: 24h before --until]: now, today, yesterday, -2h, "2h ago", YYYY-MM-DD [HH:MM[:SS]]
+    #[arg(short = 'S', long, value_name = "WHEN", allow_hyphen_values = true)]
+    pub since: Option<String>,
+    /// Traffic at or before WHEN [default: now] (same forms as --since)
+    #[arg(short = 'U', long, value_name = "WHEN", allow_hyphen_values = true)]
+    pub until: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
