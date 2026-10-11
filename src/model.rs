@@ -1,6 +1,8 @@
 //! Output model: homelab-api's network schemas without `uri`, with IDs that
 //! carry no controller prefix. Serialize-only; JSON is camelCase.
 
+use std::collections::BTreeMap;
+
 use serde::{Serialize, Serializer};
 
 macro_rules! str_enum {
@@ -42,6 +44,22 @@ str_enum!(DhcpMode { Server => "server", Relay => "relay", Disabled => "disabled
 str_enum!(WanStatus { Connected => "connected", Disconnected => "disconnected" });
 str_enum!(WifiBand { Band2g => "band2g", Band5g => "band5g", Band6g => "band6g" });
 str_enum!(SecurityProtocol { Open => "open", Wpa2 => "wpa2", Wpa3 => "wpa3", Wpa2Wpa3 => "wpa2Wpa3" });
+str_enum!(LogSeverity { Info => "info", Low => "low", Warning => "warning", Medium => "medium", High => "high", VeryHigh => "veryHigh", Unknown => "unknown" });
+
+impl LogSeverity {
+    /// The controller's SCREAMING_SNAKE value; anything new is `Unknown`.
+    pub fn from_controller(s: &str) -> Self {
+        match s {
+            "INFO" => Self::Info,
+            "LOW" => Self::Low,
+            "WARNING" => Self::Warning,
+            "MEDIUM" => Self::Medium,
+            "HIGH" => Self::High,
+            "VERY_HIGH" => Self::VeryHigh,
+            _ => Self::Unknown,
+        }
+    }
+}
 
 /// Go serializes a nil slice as `null`; used where Go can produce one.
 #[allow(clippy::ptr_arg)]
@@ -551,6 +569,54 @@ impl_ids!(
     WanList
 );
 
+/// A client named in a log entry; `id` is `None` for a client no longer in
+/// the client list.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LogClientRef {
+    pub kind: &'static str,
+    pub id: Option<String>,
+    pub name: String,
+}
+
+/// One system log entry, as `logs -o json` prints it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogEntry {
+    pub id: String,
+    /// RFC 3339 with milliseconds and the local offset.
+    pub time: String,
+    pub severity: LogSeverity,
+    pub category: String,
+    pub subcategory: String,
+    pub event: String,
+    pub title: String,
+    pub message: String,
+    pub devices: Vec<DeviceRef>,
+    pub clients: Vec<LogClientRef>,
+    pub details: BTreeMap<String, String>,
+    /// Epoch milliseconds, for the text renderer.
+    #[serde(skip)]
+    pub timestamp_ms: i64,
+}
+
+/// `VERY_HIGH` → `veryHigh`.
+pub fn screaming_to_camel(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for (i, word) in s.split('_').filter(|w| !w.is_empty()).enumerate() {
+        let lower = word.to_lowercase();
+        if i == 0 {
+            out.push_str(&lower);
+        } else {
+            let mut chars = lower.chars();
+            if let Some(first) = chars.next() {
+                out.extend(first.to_uppercase());
+                out.push_str(chars.as_str());
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -676,5 +742,35 @@ mod tests {
     fn link_speed_uses_spec_values() {
         assert_eq!(LinkSpeed::Gbe2p5.as_str(), "gbe2_5");
         assert_eq!(serde_json::to_value(LinkSpeed::Fe).unwrap(), json!("fe"));
+    }
+
+    #[test]
+    fn screaming_to_camel_cases() {
+        for (input, want) in [
+            ("VERY_HIGH", "veryHigh"),
+            ("CLIENT_DEVICES", "clientDevices"),
+            ("WIFI_STATS", "wifiStats"),
+            ("WLAN", "wlan"),
+            ("", ""),
+        ] {
+            assert_eq!(screaming_to_camel(input), want, "{input}");
+        }
+    }
+
+    #[test]
+    fn log_severity_from_controller() {
+        assert_eq!(
+            LogSeverity::from_controller("VERY_HIGH"),
+            LogSeverity::VeryHigh
+        );
+        assert_eq!(
+            LogSeverity::from_controller("WARNING"),
+            LogSeverity::Warning
+        );
+        assert_eq!(
+            LogSeverity::from_controller("CRITICAL"),
+            LogSeverity::Unknown
+        );
+        assert_eq!(LogSeverity::VeryHigh.as_str(), "veryHigh");
     }
 }

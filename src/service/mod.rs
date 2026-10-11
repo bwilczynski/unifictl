@@ -4,12 +4,14 @@
 mod clients;
 mod common;
 mod devices;
+mod logs;
 mod ports;
 mod ssids;
 mod topology;
 mod vlans;
 mod wans;
 
+pub use logs::{FOLLOW_INTERVAL, Follower, LogFilter, LogPage, RefIndex, backoff, follow_loop};
 pub use ports::PortFilter;
 
 use crate::unifi::UnifiApi;
