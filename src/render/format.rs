@@ -1,5 +1,7 @@
 //! Ported from homelab-cli/internal/output/output.go.
 
+use jiff::{Timestamp, tz::TimeZone};
+
 use crate::model::{LinkSpeed, WifiBand};
 
 /// Seconds → "1d 0h 0m 0s"; leading zero segments skipped, seconds always shown.
@@ -50,6 +52,17 @@ pub fn format_link_speed(s: LinkSpeed) -> &'static str {
     }
 }
 
+/// Epoch seconds → UTC "YYYY-MM-DD HH:MM" (absolute, so output is stable).
+pub fn format_last_seen(epoch: i64) -> String {
+    Timestamp::from_second(epoch)
+        .map(|t| {
+            t.to_zoned(TimeZone::UTC)
+                .strftime("%Y-%m-%d %H:%M")
+                .to_string()
+        })
+        .unwrap_or_else(|_| "-".to_string())
+}
+
 pub fn format_bands(bands: &[WifiBand]) -> String {
     bands
         .iter()
@@ -92,5 +105,18 @@ mod tests {
             "2.4 GHz, 5 GHz"
         );
         assert_eq!(format_bands(&[]), "");
+    }
+
+    #[test]
+    fn last_seen_is_utc_minutes() {
+        assert_eq!(format_last_seen(1791712800), "2026-10-11 10:00");
+        assert_eq!(format_last_seen(0), "1970-01-01 00:00");
+    }
+
+    #[test]
+    fn link_speed_mbps() {
+        assert_eq!(LinkSpeed::E.mbps(), 10);
+        assert_eq!(LinkSpeed::Gbe2p5.mbps(), 2500);
+        assert_eq!(LinkSpeed::Gbe10.mbps(), 10000);
     }
 }

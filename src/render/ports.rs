@@ -142,8 +142,8 @@ pub fn list_table(list: &NetworkPortList, wide: bool, color: bool) -> String {
                 &r.poe_mode,
                 &r.lag_info,
                 &r.sfp_present,
-                &r.rx,
-                &r.tx,
+                &style::down(&r.rx, color),
+                &style::up(&r.tx, color),
                 &r.connected_to,
             ]);
         } else {
@@ -330,5 +330,23 @@ mod tests {
         let wide = list_table(&list, true, false);
         assert!(wide.lines().next().unwrap().contains("LINK SPEED"));
         assert!(wide.contains("2.0 KB/s"));
+    }
+
+    #[test]
+    fn wide_rx_cyan_tx_magenta() {
+        let list = NetworkPortList {
+            items: vec![NetworkPort {
+                port: port(),
+                device: DeviceRef::new("us-8".into(), "US 8".into()),
+            }],
+        };
+        let out = list_table(&list, true, true);
+        let p = decorate_port(&port());
+        assert!(out.contains(&format!("\x1b[36m{}\x1b[0m", p.rx)), "{out}");
+        assert!(out.contains(&format!("\x1b[35m{}\x1b[0m", p.tx)), "{out}");
+        assert!(
+            !list_table(&list, false, true).contains("\x1b[36m"),
+            "narrow has no traffic"
+        );
     }
 }

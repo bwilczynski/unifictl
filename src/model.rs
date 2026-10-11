@@ -44,6 +44,20 @@ str_enum!(DhcpMode { Server => "server", Relay => "relay", Disabled => "disabled
 str_enum!(WanStatus { Connected => "connected", Disconnected => "disconnected" });
 str_enum!(WifiBand { Band2g => "band2g", Band5g => "band5g", Band6g => "band6g" });
 str_enum!(SecurityProtocol { Open => "open", Wpa2 => "wpa2", Wpa3 => "wpa3", Wpa2Wpa3 => "wpa2Wpa3" });
+
+impl LinkSpeed {
+    /// Nominal speed in Mbps.
+    pub fn mbps(self) -> i64 {
+        match self {
+            Self::E => 10,
+            Self::Fe => 100,
+            Self::Gbe1 => 1000,
+            Self::Gbe2p5 => 2500,
+            Self::Gbe5 => 5000,
+            Self::Gbe10 => 10000,
+        }
+    }
+}
 str_enum!(LogSeverity { Info => "info", Low => "low", Warning => "warning", Medium => "medium", High => "high", VeryHigh => "veryHigh", Unknown => "unknown" });
 
 impl LogSeverity {

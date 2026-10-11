@@ -84,11 +84,17 @@ fn base(t: &mut Table, b: &DeviceBase, color: bool) {
     };
     t.row(&[
         "TRAFFIC RX",
-        &traffic(b.traffic.rx_bytes_per_sec, b.traffic.rx_bytes_total),
+        &style::down(
+            &traffic(b.traffic.rx_bytes_per_sec, b.traffic.rx_bytes_total),
+            color,
+        ),
     ]);
     t.row(&[
         "TRAFFIC TX",
-        &traffic(b.traffic.tx_bytes_per_sec, b.traffic.tx_bytes_total),
+        &style::up(
+            &traffic(b.traffic.tx_bytes_per_sec, b.traffic.tx_bytes_total),
+            color,
+        ),
     ]);
     if let Some(ul) = &b.uplink {
         let mut s = ul.device.name.clone();
@@ -135,8 +141,8 @@ fn port_sections(t: &mut Table, ports: &[DevicePort], all_ports: bool, color: bo
             &r.lag_info,
             &r.poe_mode,
             &r.poe_watts,
-            &r.rx,
-            &r.tx,
+            &style::down(&r.rx, color),
+            &style::up(&r.tx, color),
             &r.connected_to,
         ]);
     }
@@ -229,6 +235,23 @@ mod tests {
         assert!(
             out.lines()
                 .any(|l| l.starts_with("MacBook Pro") && l.ends_with("-69 dBm"))
+        );
+    }
+
+    #[test]
+    fn traffic_rows_and_port_traffic_are_coloured() {
+        let out = get(&svc().get_device("us-8-60w").unwrap(), false, true);
+        let rx = out.lines().find(|l| l.starts_with("TRAFFIC RX")).unwrap();
+        let tx = out.lines().find(|l| l.starts_with("TRAFFIC TX")).unwrap();
+        assert!(rx.contains("\x1b[36m"), "{rx}");
+        assert!(tx.contains("\x1b[35m"), "{tx}");
+        let ports =
+            &out[out.find("--- PORTS ---").unwrap()..out.find("--- VLAN CONFIG ---").unwrap()];
+        assert!(
+            ports
+                .lines()
+                .skip(2)
+                .all(|l| l.is_empty() || (l.contains("\x1b[36m") && l.contains("\x1b[35m")))
         );
     }
 }
