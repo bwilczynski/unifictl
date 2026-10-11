@@ -1,4 +1,4 @@
-//! ANSI colour for status cells. Only the basic SGR colours are used, so the
+//! ANSI colour for status cells and log messages. Only the basic SGR colours are used, so the
 //! terminal's own palette (e.g. a Catppuccin theme) decides the actual shade.
 
 use crate::model::{ClientStatus, DeviceStatus, PortState, WanStatus};
@@ -8,6 +8,7 @@ use crate::setup::check::Status;
 pub enum Paint {
     Green,
     Red,
+    BoldRed,
     Yellow,
     Blue,
     BoldBlue,
@@ -19,6 +20,7 @@ impl Paint {
         match self {
             Self::Green => "32",
             Self::Red => "31",
+            Self::BoldRed => "1;31",
             Self::Yellow => "33",
             Self::Blue => "34",
             Self::BoldBlue => "1;34",
@@ -164,5 +166,10 @@ mod tests {
         );
         assert_eq!(port_state(PortState::Disabled, false), "disabled");
         assert_eq!(check_mark(Status::Fail, false), "✗");
+    }
+
+    #[test]
+    fn bold_red_sgr() {
+        assert_eq!(paint("x", Paint::BoldRed, true), "\x1b[1;31mx\x1b[0m");
     }
 }
