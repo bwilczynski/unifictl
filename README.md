@@ -83,11 +83,11 @@ so a `list` followed by a few `get`s asks the controller once. Pass
 ## Use
 
 ```
-unifictl devices list | get <id> [--all-ports]
-unifictl clients list [--status online|offline] | get <id> | traffic [<id> | --by-app] [-S WHEN] [-U WHEN]
+unifictl devices list [--wide] | get <id> [--all-ports]
+unifictl clients list [--status online|offline] [--wide] | get <id> | traffic [<id> | --by-app] [-S WHEN] [-U WHEN]
 unifictl topology [--include-clients] [--include-wireless]
 unifictl ports list [--device ID] [--mode trunk|access] [--state up|down|disabled | --all-ports] [--vlan N] [--wide]
-unifictl vlans|ssids|wans list | get <id>
+unifictl vlans|ssids|wans list [--wide] | get <id>
 unifictl logs [-n N] [-S WHEN] [-U WHEN] [-p LEVEL] [-r] [-f] [--category CAT] [--device ID] [--client ID]
 ```
 
@@ -95,9 +95,15 @@ Every command takes `-o json` and `--refresh`. `devices`, `clients`, `vlans`, `s
 and `clients traffic`, also take `-o ids`, printing one ID per line for scripts (`unifictl clients list --status offline -o ids | xargs -n1 unifictl clients get`).
 IDs are kebab-case names (`us-8-60w`); clients add the last two MAC bytes (`nas-1-0002`).
 
+`devices list` and `clients list` show an EXPERIENCE column (UniFi's score)
+for spotting trouble quickly; `--wide` on any list adds more columns, such as
+MAC, uplink, signal, link speed and live traffic.
+
 On a terminal, status cells are coloured (green healthy, red disconnected, dim
-offline/down, yellow disabled) and names are blue, in your terminal's own palette. `--color
-always|never` overrides that; `NO_COLOR` turns it off.
+offline/down, yellow disabled), health metrics are green, yellow or red
+(experience, Wi-Fi signal, and link speed against what the link allows),
+download is cyan and upload magenta, and names are blue, in your terminal's own
+palette. `--color always|never` overrides that; `NO_COLOR` turns it off.
 
 Every device, then zooming in on a switch: its port table with PoE draw,
 per-port traffic and who's on the other end of each cable, and its VLAN

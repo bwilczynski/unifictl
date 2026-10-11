@@ -367,7 +367,8 @@
           "aggregated_by": false,
           "sfp_found": false
         }
-      ]
+      ],
+      "satisfaction": 96
     },
     {
       "_id": "65f0a3000000000000000003",
@@ -424,7 +425,8 @@
           "aggregated_by": false,
           "uptime": 3651360
         }
-      ]
+      ],
+      "satisfaction": 96
     },
     {
       "_id": "65f0a3000000000000000004",
@@ -481,7 +483,8 @@
           "aggregated_by": false,
           "uptime": 3651300
         }
-      ]
+      ],
+      "satisfaction": 96
     },
     {
       "_id": "65f0a3000000000000000005",
@@ -602,7 +605,8 @@
           "excluded_networkconf_ids": [],
           "aggregated_by": false
         }
-      ]
+      ],
+      "satisfaction": 96
     }
   ]
 }
