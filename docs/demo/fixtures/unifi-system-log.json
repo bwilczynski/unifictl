@@ -1,0 +1,623 @@
+{
+  "data": [
+    {
+      "id": "66a000000000000000000001",
+      "timestamp": 1791705720000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_CONNECTED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} connected to {WLAN} on {DEVICE}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0b:03",
+          "name": "Kindle",
+          "hostname": "kindle"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        },
+        "DEVICE": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000002",
+      "timestamp": 1791706080000,
+      "severity": "LOW",
+      "category": "UNIFI_DEVICES",
+      "subcategory": "SYSTEM_WIFI",
+      "event": "AP_CHANGED_CHANNELS",
+      "status": "NEW",
+      "message_raw": "{DEVICE} moved to channel {CHANNEL} from {PREVIOUS_CHANNEL}.",
+      "parameters": {
+        "DEVICE": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "CHANNEL": {
+          "id": "02:00:00:20:00:02",
+          "name": "6"
+        },
+        "PREVIOUS_CHANNEL": {
+          "id": "02:00:00:20:00:02",
+          "name": "1"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000006",
+      "timestamp": 1791706560000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 1 (2.4 GHz, 20 MHz), -74 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000007",
+      "timestamp": 1791706860000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 6 (2.4 GHz, 20 MHz), -77 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000003",
+      "timestamp": 1791706980000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:01",
+          "name": "iPhone",
+          "hostname": "iphone"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:01",
+          "name": "Ch. 37 (6 GHz, 160 MHz), -55 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-HomeWiFi",
+          "name": "HomeWiFi"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000008",
+      "timestamp": 1791707220000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 1 (2.4 GHz, 20 MHz), -73 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000009",
+      "timestamp": 1791707520000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 6 (2.4 GHz, 20 MHz), -78 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000010",
+      "timestamp": 1791707940000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 1 (2.4 GHz, 20 MHz), -75 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000011",
+      "timestamp": 1791708240000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 6 (2.4 GHz, 20 MHz), -79 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000004",
+      "timestamp": 1791708540000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_CONNECTED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} connected to {WLAN} on {DEVICE}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0b:02",
+          "name": "Pixel-9",
+          "hostname": "pixel-9"
+        },
+        "WLAN": {
+          "id": "wlan-HomeWiFi",
+          "name": "HomeWiFi"
+        },
+        "DEVICE": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000012",
+      "timestamp": 1791708780000,
+      "severity": "MEDIUM",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_DISCONNECTED_WIRELESS",
+      "status": "NEW",
+      "message_raw": "{CLIENT} disconnected from {WLAN}. Last Connected To: {DEVICE}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        },
+        "DEVICE": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000013",
+      "timestamp": 1791708840000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_CONNECTED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} connected to {WLAN} on {DEVICE}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        },
+        "DEVICE": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000014",
+      "timestamp": 1791709320000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 6 (2.4 GHz, 20 MHz), -74 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000015",
+      "timestamp": 1791709740000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 1 (2.4 GHz, 20 MHz), -78 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000016",
+      "timestamp": 1791710100000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 6 (2.4 GHz, 20 MHz), -77 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000017",
+      "timestamp": 1791710520000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 1 (2.4 GHz, 20 MHz), -75 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000005",
+      "timestamp": 1791710820000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:01",
+          "name": "iPhone",
+          "hostname": "iphone"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:01",
+          "name": "Ch. 44 (5 GHz, 80 MHz), -52 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-HomeWiFi",
+          "name": "HomeWiFi"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000018",
+      "timestamp": 1791711240000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 6 (2.4 GHz, 20 MHz), -79 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000019",
+      "timestamp": 1791711660000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 1 (2.4 GHz, 20 MHz), -76 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    },
+    {
+      "id": "66a000000000000000000020",
+      "timestamp": 1791712080000,
+      "severity": "LOW",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "event": "CLIENT_ROAMED",
+      "status": "NEW",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}. Connection Info: {WIFI_STATS}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Roborock",
+          "hostname": "roborock"
+        },
+        "DEVICE_FROM": {
+          "id": "02:00:00:20:00:01",
+          "name": "AP-Office"
+        },
+        "DEVICE_TO": {
+          "id": "02:00:00:20:00:02",
+          "name": "AP-Living-Room"
+        },
+        "WIFI_STATS": {
+          "id": "02:00:00:a1:0c:04",
+          "name": "Ch. 6 (2.4 GHz, 20 MHz), -78 dBm"
+        },
+        "WLAN": {
+          "id": "wlan-IoT",
+          "name": "IoT"
+        }
+      }
+    }
+  ]
+}
