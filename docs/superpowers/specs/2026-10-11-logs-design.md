@@ -94,7 +94,7 @@ unifictl logs [-n N] [-S WHEN] [-U WHEN] [-p LEVEL] [-r] [-f]
 
 | Flag | Meaning |
 |---|---|
-| `-n, --lines N` | Show the N most recent matching entries. Default 50 when neither `-S` nor `-U` is given; with either, every entry in the window. With `-f`, default 10 |
+| `-n, --lines N` | Show the N most recent matching entries. Default 50 when neither `-S` nor `-U` is given; with either, every entry in the window (also with `-f`, as journalctl). With `-f` and no window, default 10 |
 | `-S, --since WHEN` | Entries at or after WHEN |
 | `-U, --until WHEN` | Entries at or before WHEN |
 | `-p, --priority LEVEL` | `low`, `medium`, `high` or `very-high`: that level and above |

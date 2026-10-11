@@ -3,20 +3,23 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use clap::Parser;
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 use serde::Serialize;
 
 use crate::cache::Cache;
 use crate::cli::{
-    Cli, ClientsCommand, ColorMode, Command, ConfigCommand, DevicesCommand, LookupCommand,
-    ModeFilter, OutputFormat, PortsCommand, StateFilter, StatusFilter,
+    CategoryArg, Cli, ClientsCommand, ColorMode, Command, ConfigCommand, DevicesCommand, LogsArgs,
+    LookupCommand, ModeFilter, OutputFormat, PortsCommand, PriorityArg, StateFilter, StatusFilter,
 };
 use crate::completion;
 use crate::config;
 use crate::error::{Error, Result};
-use crate::model::{ClientStatus, Ids, PortState, VlanMode};
+use crate::model::{ClientStatus, Ids, LogEntry, LogSeverity, PortState, VlanMode};
 use crate::render;
-use crate::service::{PortFilter, Service};
+use crate::service::{LogFilter, PortFilter, Service, follow_loop};
 use crate::setup;
+use crate::timespec;
 use crate::unifi::client::UnifiClient;
 
 /// Entry point used by `main.rs`; returns the process exit code.
@@ -91,6 +94,10 @@ pub fn run(cli: Cli) -> Result<Outcome> {
         return run_config(command, &cli, &env, color);
     }
     let svc = build_service(&cli)?;
+    if let Command::Logs(args) = &cli.command {
+        run_logs(&svc, args, cli.output, color, &env)?;
+        return Ok(Outcome::ok(String::new()));
+    }
     execute(&svc, &cli.command, cli.output, color).map(Outcome::ok)
 }
 
@@ -141,6 +148,119 @@ fn run_config(
         stdout: emit(cli.output, &report, |r| render::check::table(r, color))?,
         code,
     })
+}
+
+/// `logs` writes as it goes rather than returning one string, so `--follow`
+/// can stream and a closed pipe ends it quietly.
+fn run_logs(
+    svc: &Service,
+    args: &LogsArgs,
+    out: OutputFormat,
+    color: bool,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<()> {
+    let tz = TimeZone::system();
+    let now = now(env).to_zoned(tz.clone());
+    let at = |when: &Option<String>| {
+        when.as_deref()
+            .map(|w| timespec::parse(w, &now).map(|t| t.as_millisecond()))
+            .transpose()
+    };
+    let (since_ms, until_ms) = (at(&args.since)?, at(&args.until)?);
+    if let (Some(since), Some(until)) = (since_ms, until_ms)
+        && since > until
+    {
+        return Err(Error::Other("--since is after --until".into()));
+    }
+    let lines = args.lines.or(default_lines(
+        args.follow,
+        since_ms.is_some() || until_ms.is_some(),
+    ));
+    let filter = LogFilter {
+        since_ms,
+        until_ms,
+        min_severity: args.priority.map(|p| match p {
+            PriorityArg::Low => LogSeverity::Low,
+            PriorityArg::Medium => LogSeverity::Medium,
+            PriorityArg::High => LogSeverity::High,
+            PriorityArg::VeryHigh => LogSeverity::VeryHigh,
+        }),
+        categories: args
+            .category
+            .iter()
+            .map(|c| CategoryArg::controller(*c))
+            .collect(),
+        devices: args.device.clone(),
+        clients: args.client.clone(),
+        lines,
+        newest_first: args.reverse,
+        with_refs: out == OutputFormat::Json,
+    };
+    let page = svc.logs(&filter, now.timestamp().as_millisecond(), &tz)?;
+
+    let mut stdout = std::io::stdout().lock();
+    let mut emit = |entries: &[LogEntry]| -> Result<bool> {
+        let mut buf = String::new();
+        for e in entries {
+            match out {
+                OutputFormat::Json => buf.push_str(&render::logs::json_line(e)?),
+                _ => buf.push_str(&render::logs::line(e, &tz, color)),
+            }
+        }
+        write_flush(&mut stdout, &buf)
+    };
+    if !args.follow {
+        emit(&page.entries)?;
+        return Ok(());
+    }
+    let (first, mut follower) = page.follow(filter);
+    if !emit(&first)? {
+        return Ok(());
+    }
+    follow_loop(
+        || follower.poll(svc, now_ms(env), &tz),
+        emit,
+        std::thread::sleep,
+        |w| eprintln!("warning: {w}"),
+    )
+}
+
+/// How many entries `logs` shows without `-n`: the whole window when one is
+/// given (even with `-f`, as journalctl), else 10 when following, else 50.
+fn default_lines(follow: bool, window: bool) -> Option<usize> {
+    if window {
+        None
+    } else if follow {
+        Some(10)
+    } else {
+        Some(50)
+    }
+}
+
+/// Writes and flushes `s`; `false` when the reader has gone away.
+fn write_flush(w: &mut impl std::io::Write, s: &str) -> Result<bool> {
+    use std::io::ErrorKind;
+    match w.write_all(s.as_bytes()).and_then(|()| w.flush()) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(false),
+        Err(e) => Err(Error::Other(format!("write output: {e}"))),
+    }
+}
+
+/// The current time. Fixture builds read `UNIFICTL_NOW` (RFC 3339) so tests
+/// get a fixed clock.
+fn now(env: &dyn Fn(&str) -> Option<String>) -> Timestamp {
+    #[cfg(feature = "fixtures")]
+    if let Some(t) = env("UNIFICTL_NOW").and_then(|v| v.parse().ok()) {
+        return t;
+    }
+    #[cfg(not(feature = "fixtures"))]
+    let _ = env;
+    Timestamp::now()
+}
+
+fn now_ms(env: &dyn Fn(&str) -> Option<String>) -> i64 {
+    now(env).as_millisecond()
 }
 
 fn build_service(cli: &Cli) -> Result<Service> {
@@ -273,6 +393,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
                 emit(out, &svc.get_wan(id)?, |w| render::wans::get(w, color))
             }
         },
+        Command::Logs(_) => unreachable!("logs streams its output from run"),
         Command::Config { .. } => unreachable!("config commands are handled by run"),
         Command::Completions { shell } => completion::script(*shell),
         Command::Version => Ok(format!("unifictl {}\n", env!("CARGO_PKG_VERSION"))),
@@ -393,6 +514,15 @@ mod tests {
             true,
             &env_with(None)
         ));
+    }
+
+    #[test]
+    fn logs_default_lines_like_journalctl() {
+        assert_eq!(default_lines(false, false), Some(50));
+        assert_eq!(default_lines(false, true), None);
+        assert_eq!(default_lines(true, false), Some(10));
+        // journalctl -f --since shows the whole window, then follows.
+        assert_eq!(default_lines(true, true), None);
     }
 
     #[test]
