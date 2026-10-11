@@ -6,7 +6,8 @@ use serde::de::DeserializeOwned;
 
 use super::UnifiApi;
 use super::types::{
-    ClientV2, Device, Envelope, LogQuery, NetworkConf, Sta, SystemLogEntry, SystemLogPage, WlanConf,
+    ClientV2, Device, DpiEntry, Envelope, LogQuery, NetworkConf, Sta, SystemLogEntry,
+    SystemLogPage, TrafficReport, WlanConf,
 };
 use crate::error::{Error, Result};
 
@@ -20,6 +21,12 @@ pub struct FixtureApi {
     pub networks: Vec<NetworkConf>,
     /// `unifi-system-log.json`; empty when that file is absent.
     pub log_entries: Vec<SystemLogEntry>,
+    /// `unifi-v2-traffic.json`; empty when absent.
+    pub traffic: TrafficReport,
+    /// `unifi-dpi-*.json`; `None` when absent, like a controller without an
+    /// API key.
+    pub dpi_categories: Option<Vec<DpiEntry>>,
+    pub dpi_apps: Option<Vec<DpiEntry>>,
     /// When true every call fails, simulating an unreachable controller.
     pub fail: bool,
 }
@@ -30,8 +37,9 @@ impl FixtureApi {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
     }
 
-    /// Loads the `unifi-*.json` files (each `{"data": [...]}`) from `dir`; the
-    /// system log is optional.
+    /// Loads the `unifi-*.json` files (each `{"data": [...]}`, the traffic
+    /// report a bare object) from `dir`; the system log, traffic and DPI
+    /// files are optional.
     pub fn load(dir: &Path) -> Result<Self> {
         Ok(Self {
             devices: read(dir, "unifi-devices.json")?,
@@ -41,6 +49,9 @@ impl FixtureApi {
             wlans: read(dir, "unifi-wlanconf.json")?,
             networks: read(dir, "unifi-networkconf.json")?,
             log_entries: read_optional(dir, "unifi-system-log.json")?,
+            traffic: read_object_optional(dir, "unifi-v2-traffic.json")?,
+            dpi_categories: read_if_present(dir, "unifi-dpi-categories.json")?,
+            dpi_apps: read_if_present(dir, "unifi-dpi-applications.json")?,
             fail: false,
         })
     }
@@ -68,6 +79,25 @@ fn read_optional<T: DeserializeOwned>(dir: &Path, name: &str) -> Result<Vec<T>> 
     } else {
         Ok(Vec::new())
     }
+}
+
+fn read_if_present<T: DeserializeOwned>(dir: &Path, name: &str) -> Result<Option<Vec<T>>> {
+    dir.join(name).exists().then(|| read(dir, name)).transpose()
+}
+
+fn read_object_optional<T: DeserializeOwned + Default>(dir: &Path, name: &str) -> Result<T> {
+    let path = dir.join(name);
+    if !path.exists() {
+        return Ok(T::default());
+    }
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| Error::Other(format!("fixture {}: {e}", path.display())))?;
+    serde_json::from_str(&text)
+        .map_err(|e| Error::Other(format!("fixture {}: {e}", path.display())))
+}
+
+fn no_catalogue() -> Error {
+    Error::Unifi("needs an API key".into())
 }
 
 impl UnifiApi for FixtureApi {
@@ -124,6 +154,20 @@ impl UnifiApi for FixtureApi {
             total_page_count,
         })
     }
+
+    /// The whole report, whatever the window.
+    fn traffic(&self, _start_ms: i64, _end_ms: i64) -> Result<TrafficReport> {
+        self.check()?;
+        Ok(self.traffic.clone())
+    }
+    fn dpi_categories(&self) -> Result<Vec<DpiEntry>> {
+        self.check()?;
+        self.dpi_categories.clone().ok_or_else(no_catalogue)
+    }
+    fn dpi_applications(&self) -> Result<Vec<DpiEntry>> {
+        self.check()?;
+        self.dpi_apps.clone().ok_or_else(no_catalogue)
+    }
 }
 
 #[cfg(test)]
@@ -143,6 +187,17 @@ mod tests {
         assert_eq!(api.devices[6].name, "CGF-01");
         assert_eq!(api.devices[6].kind, "udm");
         assert_eq!(api.log_entries.len(), 10);
+        assert_eq!(api.traffic.client_usage_by_app.len(), 3);
+        assert_eq!(api.traffic.total_usage_by_app.len(), 6);
+        let nas = &api.traffic.client_usage_by_app[1];
+        assert_eq!(nas.client.name.as_deref(), Some(""));
+        assert_eq!(nas.client.hostname.as_deref(), Some("nas-1"));
+        assert!(nas.client.is_wired);
+        assert_eq!(nas.usage_by_app[0].total_bytes, 3745513472);
+        assert_eq!(nas.usage_by_app[0].activity_seconds, 7200);
+        assert_eq!(api.traffic.total_usage_by_app[0].client_count, 1);
+        assert_eq!(api.dpi_categories().unwrap().len(), 4);
+        assert_eq!(api.dpi_applications().unwrap()[1].id, 262145);
     }
 
     #[test]
@@ -203,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_log_fixture_is_an_empty_log() {
+    fn optional_fixtures_may_be_absent() {
         let dir = tempfile::tempdir().unwrap();
         for f in [
             "unifi-devices.json",
@@ -217,5 +272,10 @@ mod tests {
         }
         let api = FixtureApi::load(dir.path()).unwrap();
         assert!(api.log_entries.is_empty());
+        assert!(api.traffic.client_usage_by_app.is_empty());
+        assert!(api.traffic(0, 1).unwrap().total_usage_by_app.is_empty());
+        let err = api.dpi_categories().unwrap_err().to_string();
+        assert!(err.contains("needs an API key"), "{err}");
+        assert!(api.dpi_applications().is_err());
     }
 }

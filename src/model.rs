@@ -546,6 +546,81 @@ pub struct SsidDetail {
 
 // ---------- -o ids ----------
 
+/// A DPI category: the controller's number and name.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct DpiCategoryRef {
+    pub id: i64,
+    pub name: String,
+}
+
+/// A DPI application; `id` is `category << 16 | application`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AppRef {
+    pub id: i64,
+    pub name: String,
+    pub category: DpiCategoryRef,
+    /// False when `name` is a fallback (`Unknown (…)`, `Unidentified`).
+    #[serde(skip)]
+    pub named: bool,
+}
+
+/// A client's internet traffic over the window, with its largest application.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientTraffic {
+    pub id: String,
+    pub name: String,
+    pub mac: String,
+    pub bytes_received: i64,
+    pub bytes_transmitted: i64,
+    pub total_bytes: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_app: Option<AppRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ClientTrafficList {
+    pub items: Vec<ClientTraffic>,
+}
+
+/// One application's share of a client's traffic.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientAppTraffic {
+    #[serde(flatten)]
+    pub app: AppRef,
+    pub bytes_received: i64,
+    pub bytes_transmitted: i64,
+    pub total_bytes: i64,
+    pub activity_seconds: i64,
+}
+
+/// One client's traffic by application.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ClientAppTrafficList {
+    pub id: String,
+    pub name: String,
+    pub mac: String,
+    pub items: Vec<ClientAppTraffic>,
+}
+
+/// One application's traffic across the site.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppTraffic {
+    #[serde(flatten)]
+    pub app: AppRef,
+    pub client_count: i64,
+    pub bytes_received: i64,
+    pub bytes_transmitted: i64,
+    pub total_bytes: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AppTrafficList {
+    pub items: Vec<AppTraffic>,
+}
+
 /// List types whose items have an ID, for `-o ids`.
 pub trait Ids {
     fn ids(&self) -> Vec<&str>;
@@ -564,6 +639,7 @@ macro_rules! impl_ids {
 impl_ids!(
     NetworkDeviceList,
     NetworkClientList,
+    ClientTrafficList,
     VlanList,
     SsidList,
     WanList

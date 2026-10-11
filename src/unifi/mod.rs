@@ -7,7 +7,9 @@ pub mod fixtures;
 use std::thread::ScopedJoinHandle;
 
 use crate::error::Result;
-use types::{ClientV2, Device, LogQuery, NetworkConf, Sta, SystemLogPage, WlanConf};
+use types::{
+    ClientV2, Device, DpiEntry, LogQuery, NetworkConf, Sta, SystemLogPage, TrafficReport, WlanConf,
+};
 
 /// Runs independent controller reads concurrently, so a command waits for
 /// the slowest endpoint rather than the sum of all of them, and binds each
@@ -35,7 +37,7 @@ pub(crate) fn joined<T>(handle: ScopedJoinHandle<'_, Result<T>>) -> Result<T> {
         .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
 }
 
-/// The six controller reads the network domain needs. Implemented by the HTTP
+/// The controller reads the network domain needs. Implemented by the HTTP
 /// client and by `FixtureApi`. `Sync` so independent reads can run on
 /// parallel threads (see [`fetch!`]).
 pub trait UnifiApi: Sync {
@@ -47,6 +49,13 @@ pub trait UnifiApi: Sync {
     fn network_conf(&self) -> Result<Vec<NetworkConf>>;
     /// One page of the system log. Never cached.
     fn system_log(&self, query: &LogQuery) -> Result<SystemLogPage>;
+    /// Traffic per client and application between two epoch milliseconds.
+    /// Never cached.
+    fn traffic(&self, start_ms: i64, end_ms: i64) -> Result<TrafficReport>;
+    /// DPI categories by number; needs an API key (Integration API).
+    fn dpi_categories(&self) -> Result<Vec<DpiEntry>>;
+    /// DPI applications by `category << 16 | application`; needs an API key.
+    fn dpi_applications(&self) -> Result<Vec<DpiEntry>>;
 
     /// Active followed by offline clients (homelab-api `GetAllClients`).
     fn all_clients(&self, history_days: i64) -> Result<Vec<ClientV2>> {

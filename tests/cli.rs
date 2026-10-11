@@ -75,6 +75,9 @@ mod with_fixtures {
             &["devices", "get", "us-8", "--all-ports"],
             &["clients", "list"],
             &["clients", "get", "nas-1-0002"],
+            &["clients", "traffic"],
+            &["clients", "traffic", "macbook-pro-0001"],
+            &["clients", "traffic", "--by-app"],
             &["ports", "list", "--all-ports"],
             &["wans", "list"],
             &["wans", "get", "internet-2"],
@@ -240,7 +243,7 @@ mod with_fixtures {
             assert_eq!(o.status.code(), Some(1), "{args:?}");
             assert_eq!(
                 String::from_utf8_lossy(&o.stderr),
-                "Error: -o ids is only supported by devices, clients, vlans, ssids and wans list\n",
+                "Error: -o ids is only supported by devices, clients, vlans, ssids and wans list, and clients traffic\n",
                 "{args:?}"
             );
             assert!(o.stdout.is_empty(), "{args:?}");
@@ -588,6 +591,140 @@ mod with_fixtures {
         assert!(out.status.success(), "{:?}", out.status);
         assert_eq!(String::from_utf8_lossy(&out.stderr), "");
     }
+
+    fn traffic(args: &[&str]) -> Output {
+        Command::new(env!("CARGO_BIN_EXE_unifictl"))
+            .arg("--fixtures")
+            .arg(fixtures())
+            .args(["clients", "traffic"])
+            .args(args)
+            .env("TZ", "UTC")
+            .env("UNIFICTL_NOW", "2026-10-11T12:00:00Z")
+            .output()
+            .unwrap()
+    }
+
+    /// Rows of cells, split on runs of 2+ spaces so padding does not matter.
+    fn cells(text: &str) -> Vec<Vec<String>> {
+        text.lines()
+            .map(|l| {
+                l.split("  ")
+                    .map(str::trim)
+                    .filter(|c| !c.is_empty())
+                    .map(String::from)
+                    .collect()
+            })
+            .collect()
+    }
+
+    fn ok_out(o: &Output) -> String {
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        stdout(o)
+    }
+
+    #[test]
+    fn traffic_clients_view() {
+        let rows = cells(&ok_out(&traffic(&[])));
+        assert_eq!(rows[0], ["ID", "NAME", "DOWN", "UP", "TOTAL", "TOP APP"]);
+        assert_eq!(
+            rows[1],
+            [
+                "nas-1-0002",
+                "nas-1",
+                "501.0 MB",
+                "3.0 GB",
+                "3.5 GB",
+                "Example Web"
+            ]
+        );
+        assert_eq!(rows.len(), 4);
+    }
+
+    #[test]
+    fn traffic_one_client_and_by_app() {
+        let rows = cells(&ok_out(&traffic(&["macbook-pro-0001"])));
+        assert_eq!(
+            rows[0],
+            ["APP", "CATEGORY", "DOWN", "UP", "TOTAL", "ACTIVE"]
+        );
+        assert_eq!(rows[1][0], "Example Video");
+        let rows = cells(&ok_out(&traffic(&["--by-app", "--since", "yesterday"])));
+        assert_eq!(
+            rows[0],
+            ["APP", "CATEGORY", "CLIENTS", "DOWN", "UP", "TOTAL"]
+        );
+        assert_eq!(rows.len(), 7);
+    }
+
+    #[test]
+    fn traffic_json_and_ids() {
+        let out = ok_out(&traffic(&["-o", "json"]));
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["items"][1]["id"], "macbook-pro-0001");
+        assert_eq!(v["items"][1]["totalBytes"], 2337275904_i64);
+        assert_eq!(v["items"][1]["topApp"]["id"], 262145);
+        assert_eq!(
+            ok_out(&traffic(&["-o", "ids"])),
+            "nas-1-0002\nmacbook-pro-0001\nsonos-one-sl-l-bb03\n"
+        );
+        let out = ok_out(&traffic(&["--by-app", "-o", "json"]));
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["items"][0]["clientCount"], 1);
+    }
+
+    #[test]
+    fn traffic_ids_only_for_the_clients_view() {
+        for args in [
+            &["macbook-pro-0001", "-o", "ids"][..],
+            &["--by-app", "-o", "ids"],
+        ] {
+            let out = traffic(args);
+            assert_eq!(out.status.code(), Some(1), "{args:?}");
+            assert!(String::from_utf8_lossy(&out.stderr).contains("-o ids"));
+        }
+    }
+
+    #[test]
+    fn traffic_id_conflicts_with_by_app() {
+        assert_eq!(
+            traffic(&["macbook-pro-0001", "--by-app"]).status.code(),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn traffic_unknown_client_and_bad_window() {
+        let out = traffic(&["nobody-00"]);
+        assert_eq!(out.status.code(), Some(1));
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("Network client not found: nobody-00")
+        );
+        let out = traffic(&["--since", "today", "--until", "yesterday"]);
+        assert_eq!(out.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("--since is after --until"));
+    }
+
+    #[test]
+    fn missing_catalogue_prints_note_once() {
+        let dir = tempfile::tempdir().unwrap();
+        for entry in std::fs::read_dir(fixtures()).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_str().unwrap().to_string();
+            if !name.starts_with("unifi-dpi-") {
+                std::fs::copy(&path, dir.path().join(&name)).unwrap();
+            }
+        }
+        let out = run_in(dir.path(), &["clients", "traffic", "--by-app"]);
+        assert!(out.status.success());
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(
+            err.matches("note: application names unavailable (needs an API key)")
+                .count(),
+            1,
+            "{err}"
+        );
+        assert!(stdout(&out).contains("Unknown (4:1)"));
+    }
 }
 
 #[test]
@@ -602,7 +739,7 @@ fn ids_with_config_check_fails_before_checking() {
     assert_eq!(out.status.code(), Some(1));
     assert_eq!(
         String::from_utf8_lossy(&out.stderr),
-        "Error: -o ids is only supported by devices, clients, vlans, ssids and wans list\n"
+        "Error: -o ids is only supported by devices, clients, vlans, ssids and wans list, and clients traffic\n"
     );
     assert!(out.stdout.is_empty(), "no check report");
 }

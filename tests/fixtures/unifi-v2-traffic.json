@@ -1,0 +1,33 @@
+{
+  "client_usage_by_app": [
+    {
+      "client": {"mac": "3c:ee:ee:00:00:01", "name": "MacBook Pro", "hostname": "macbook", "is_wired": false},
+      "usage_by_app": [
+        {"category": 4, "application": 1, "bytes_received": 2147483648, "bytes_transmitted": 52428800, "total_bytes": 2199912448, "activity_seconds": 5400},
+        {"category": 0, "application": 127, "bytes_received": 104857600, "bytes_transmitted": 20971520, "total_bytes": 125829120, "activity_seconds": 1800},
+        {"category": 255, "application": 65535, "bytes_received": 10485760, "bytes_transmitted": 1048576, "total_bytes": 11534336, "activity_seconds": 60}
+      ]
+    },
+    {
+      "client": {"mac": "68:ee:ee:00:00:02", "name": "", "hostname": "nas-1", "is_wired": true},
+      "usage_by_app": [
+        {"category": 13, "application": 7, "bytes_received": 524288000, "bytes_transmitted": 3221225472, "total_bytes": 3745513472, "activity_seconds": 7200},
+        {"category": 9, "application": 4242, "bytes_received": 1048576, "bytes_transmitted": 1048576, "total_bytes": 2097152, "activity_seconds": 30}
+      ]
+    },
+    {
+      "client": {"mac": "c4:38:75:aa:bb:03", "name": "Sonos One SL (L)", "hostname": "SonosZP", "is_wired": false},
+      "usage_by_app": [
+        {"category": 4, "application": 999, "bytes_received": 314572800, "bytes_transmitted": 5242880, "total_bytes": 319815680, "activity_seconds": 3600}
+      ]
+    }
+  ],
+  "total_usage_by_app": [
+    {"category": 4, "application": 1, "bytes_received": 2147483648, "bytes_transmitted": 52428800, "total_bytes": 2199912448, "client_count": 1},
+    {"category": 0, "application": 127, "bytes_received": 104857600, "bytes_transmitted": 20971520, "total_bytes": 125829120, "client_count": 1},
+    {"category": 255, "application": 65535, "bytes_received": 10485760, "bytes_transmitted": 1048576, "total_bytes": 11534336, "client_count": 1},
+    {"category": 13, "application": 7, "bytes_received": 524288000, "bytes_transmitted": 3221225472, "total_bytes": 3745513472, "client_count": 1},
+    {"category": 9, "application": 4242, "bytes_received": 1048576, "bytes_transmitted": 1048576, "total_bytes": 2097152, "client_count": 1},
+    {"category": 4, "application": 999, "bytes_received": 314572800, "bytes_transmitted": 5242880, "total_bytes": 319815680, "client_count": 1}
+  ]
+}

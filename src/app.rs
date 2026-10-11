@@ -3,21 +3,22 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use clap::Parser;
-use jiff::Timestamp;
 use jiff::tz::TimeZone;
+use jiff::{Timestamp, Zoned};
 use serde::Serialize;
 
 use crate::cache::Cache;
 use crate::cli::{
     CategoryArg, Cli, ClientsCommand, ColorMode, Command, ConfigCommand, DevicesCommand, LogsArgs,
     LookupCommand, ModeFilter, OutputFormat, PortsCommand, PriorityArg, StateFilter, StatusFilter,
+    TrafficArgs,
 };
 use crate::completion;
 use crate::config;
 use crate::error::{Error, Result};
 use crate::model::{ClientStatus, Ids, LogEntry, LogSeverity, PortState, VlanMode};
 use crate::render;
-use crate::service::{LogFilter, PortFilter, Service, follow_loop};
+use crate::service::{LogFilter, PortFilter, Service, TrafficView, TrafficWindow, follow_loop};
 use crate::setup;
 use crate::timespec;
 use crate::unifi::client::UnifiClient;
@@ -90,6 +91,12 @@ pub fn run(cli: Cli) -> Result<Outcome> {
     if let Command::Logs(args) = &cli.command {
         run_logs(&svc, args, cli.output, color, &env)?;
         return Ok(Outcome::ok(String::new()));
+    }
+    if let Command::Clients {
+        command: ClientsCommand::Traffic(args),
+    } = &cli.command
+    {
+        return run_traffic(&svc, args, cli.output, color, &env).map(Outcome::ok);
     }
     execute(&svc, &cli.command, cli.output, color).map(Outcome::ok)
 }
@@ -230,6 +237,57 @@ fn default_lines(follow: bool, window: bool) -> Option<usize> {
     }
 }
 
+/// `clients traffic`: needs the clock for its window, and notes on stderr
+/// when application names are unavailable.
+fn run_traffic(
+    svc: &Service,
+    args: &TrafficArgs,
+    out: OutputFormat,
+    color: bool,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<String> {
+    let now = now(env).to_zoned(TimeZone::system());
+    let w = traffic_window(args.since.as_deref(), args.until.as_deref(), &now)?;
+    fn noted<T>(view: TrafficView<T>) -> T {
+        if let Some(reason) = &view.names_unavailable {
+            eprintln!("note: application names unavailable ({reason})");
+        }
+        view.data
+    }
+    if let Some(id) = &args.id {
+        emit(out, &noted(svc.client_traffic(id, w)?), |l| {
+            render::traffic::client(l, color)
+        })
+    } else if args.by_app {
+        emit(out, &noted(svc.apps_traffic(w)?), |l| {
+            render::traffic::apps(l, color)
+        })
+    } else {
+        emit_list(out, &noted(svc.clients_traffic(w)?), |l| {
+            render::traffic::clients(l, color)
+        })
+    }
+}
+
+/// The `--since`/`--until` window: `--until` defaults to now, `--since` to a
+/// day before it.
+fn traffic_window(since: Option<&str>, until: Option<&str>, now: &Zoned) -> Result<TrafficWindow> {
+    const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+    let end_ms = match until {
+        Some(u) => timespec::parse(u, now)?,
+        None => now.timestamp(),
+    }
+    .as_millisecond();
+    let start_ms = match since {
+        Some(s) => timespec::parse(s, now)?.as_millisecond(),
+        None => end_ms - DAY_MS,
+    };
+    if start_ms > end_ms {
+        return Err(Error::Other("--since is after --until".into()));
+    }
+    Ok(TrafficWindow { start_ms, end_ms })
+}
+
 /// Writes and flushes `s`; `false` when the reader has gone away.
 fn write_flush(w: &mut impl std::io::Write, s: &str) -> Result<bool> {
     use std::io::ErrorKind;
@@ -325,6 +383,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
             ClientsCommand::Get { id } => emit(out, &svc.get_client(id)?, |c| {
                 render::clients::get(c, color)
             }),
+            ClientsCommand::Traffic(_) => unreachable!("traffic is handled by run"),
         },
         Command::Topology {
             include_clients,
@@ -417,7 +476,7 @@ fn emit_list<T: Serialize + Ids>(
 }
 
 fn ids_unsupported() -> Error {
-    Error::Other("-o ids is only supported by devices, clients, vlans, ssids and wans list".into())
+    Error::Other("-o ids is only supported by devices, clients, vlans, ssids and wans list, and clients traffic".into())
 }
 
 /// Commands whose output is a list of items with IDs.
@@ -428,6 +487,11 @@ fn lists_ids(cmd: &Command) -> bool {
             command: DevicesCommand::List
         } | Command::Clients {
             command: ClientsCommand::List { .. }
+                | ClientsCommand::Traffic(TrafficArgs {
+                    id: None,
+                    by_app: false,
+                    ..
+                })
         } | Command::Vlans {
             command: LookupCommand::List
         } | Command::Ssids {
@@ -525,5 +589,43 @@ mod tests {
             true,
             &env_with(None)
         ));
+    }
+
+    fn noon() -> jiff::Zoned {
+        "2026-10-11T12:00:30Z"
+            .parse::<Timestamp>()
+            .unwrap()
+            .to_zoned(TimeZone::UTC)
+    }
+
+    fn ms(s: &str) -> i64 {
+        s.parse::<Timestamp>().unwrap().as_millisecond()
+    }
+
+    #[test]
+    fn traffic_window_defaults_to_the_last_day() {
+        let w = traffic_window(None, None, &noon()).unwrap();
+        assert_eq!(w.end_ms, ms("2026-10-11T12:00:30Z"));
+        assert_eq!(w.start_ms, ms("2026-10-10T12:00:30Z"));
+    }
+
+    #[test]
+    fn traffic_window_until_alone_reaches_back_a_day() {
+        let w = traffic_window(None, Some("2026-10-05 08:00"), &noon()).unwrap();
+        assert_eq!(w.end_ms, ms("2026-10-05T08:00:00Z"));
+        assert_eq!(w.start_ms, ms("2026-10-04T08:00:00Z"));
+    }
+
+    #[test]
+    fn traffic_window_since_and_until() {
+        let w = traffic_window(Some("-2h"), Some("now"), &noon()).unwrap();
+        assert_eq!(w.start_ms, ms("2026-10-11T10:00:30Z"));
+        assert_eq!(w.end_ms, ms("2026-10-11T12:00:30Z"));
+    }
+
+    #[test]
+    fn traffic_window_since_after_until_is_an_error() {
+        let err = traffic_window(Some("today"), Some("yesterday"), &noon()).unwrap_err();
+        assert_eq!(err.to_string(), "--since is after --until");
     }
 }

@@ -10,6 +10,7 @@ pub mod ports;
 pub mod ssids;
 pub mod style;
 pub mod topology;
+pub mod traffic;
 pub mod vlans;
 pub mod wans;
 

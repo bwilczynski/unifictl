@@ -8,11 +8,13 @@ mod logs;
 mod ports;
 mod ssids;
 mod topology;
+mod traffic;
 mod vlans;
 mod wans;
 
 pub use logs::{FOLLOW_INTERVAL, Follower, LogFilter, LogPage, RefIndex, backoff, follow_loop};
 pub use ports::PortFilter;
+pub use traffic::{TrafficView, TrafficWindow};
 
 use crate::unifi::UnifiApi;
 

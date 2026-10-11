@@ -23,6 +23,12 @@ impl Cache {
 
     /// The body stored for `key` if it is younger than the TTL.
     pub fn get(&self, key: &str) -> Option<String> {
+        self.get_within(key, self.ttl)
+    }
+
+    /// The body stored for `key` if it is younger than `max_age`, for
+    /// responses that stay valid longer than the TTL.
+    pub fn get_within(&self, key: &str, max_age: Duration) -> Option<String> {
         if !self.read {
             return None;
         }
@@ -30,7 +36,7 @@ impl Cache {
         let modified = fs::metadata(&path).ok()?.modified().ok()?;
         // A modification time in the future (clock change) is stale too.
         let age = SystemTime::now().duration_since(modified).ok()?;
-        if age >= self.ttl {
+        if age >= max_age {
             return None;
         }
         fs::read_to_string(path).ok()
@@ -153,5 +159,25 @@ mod tests {
         let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(&c.dir), 0o700);
         assert_eq!(mode(&c.path("k")), 0o600);
+    }
+
+    #[test]
+    fn get_within_uses_its_own_max_age() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = cache(&dir, 5, true);
+        c.put("k", "v");
+        let f = fs::File::options().write(true).open(c.path("k")).unwrap();
+        f.set_modified(SystemTime::now() - Duration::from_secs(60))
+            .unwrap();
+        assert_eq!(c.get("k"), None);
+        assert_eq!(
+            c.get_within("k", Duration::from_secs(3600)).as_deref(),
+            Some("v")
+        );
+        assert_eq!(c.get_within("k", Duration::from_secs(30)), None);
+        assert_eq!(
+            cache(&dir, 5, false).get_within("k", Duration::from_secs(3600)),
+            None
+        );
     }
 }
