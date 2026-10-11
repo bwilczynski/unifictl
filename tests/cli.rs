@@ -9,8 +9,8 @@ fn unifictl(args: &[&str]) -> Output {
 }
 
 #[test]
-fn version_prints_crate_version() {
-    let out = unifictl(&["version"]);
+fn version_flag_prints_crate_version() {
+    let out = unifictl(&["--version"]);
     assert!(out.status.success());
     assert_eq!(
         String::from_utf8(out.stdout).unwrap(),
