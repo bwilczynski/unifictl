@@ -7,7 +7,7 @@ description = "Command-line client for UniFi network controllers"
 repository = "https://github.com/bwilczynski/unifictl"
 
 [features]
-# Enables the hidden --fixtures flag used by the golden equivalence tests.
+# Enables the hidden --fixtures flag used by the integration tests.
 fixtures = []
 
 [dependencies]

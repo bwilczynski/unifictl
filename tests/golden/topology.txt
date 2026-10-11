@@ -1,7 +1,0 @@
-CGF-01 (gateway)
-├── USW Flex 2.5G 8 (switch) [port 2, 2.5 GbE]
-└── US 8 60W (switch) [port 1, 1 GbE]
-    ├── US 8 (switch) [port 7, 1 GbE]
-    ├── UAP-02 (accessPoint) [6 clients] [port 8, 1 GbE]
-    ├── Switch Flex Mini (switch) [port 6, 1 GbE]
-    └── UAP-01 (accessPoint) [6 clients] [port 5, 100 Mbps]

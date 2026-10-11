@@ -1,7 +1,0 @@
-FIELD   VALUE
-ID      internet-1
-NAME    Internet 1
-IP      203.0.113.1
-UPTIME  1h 33m 47s
-STATUS  connected
-DNS     8.8.8.8, 8.8.4.4

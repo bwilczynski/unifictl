@@ -1,1 +1,0 @@
-{"bands":["band2g","band5g"],"broadcastingAps":[{"id":"uap-01","kind":"device","name":"UAP-01"},{"id":"uap-02","kind":"device","name":"UAP-02"}],"clients":[],"id":"home-wifi","name":"home-wifi","numClients":0,"securityProtocol":"wpa2","vlanId":10}

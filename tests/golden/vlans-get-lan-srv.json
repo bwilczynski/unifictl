@@ -1,1 +1,0 @@
-{"broadcastIp":"192.168.100.255","dhcpMode":"server","dhcpRange":{"end":"192.168.100.254","start":"192.168.100.200"},"dnsServers":[],"gatewayIp":"192.168.100.1","id":"lan-srv","name":"LAN-SRV","subnet":"192.168.100.0/24","vlanId":100}
