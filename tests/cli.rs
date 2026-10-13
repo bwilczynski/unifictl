@@ -387,6 +387,26 @@ mod with_fixtures {
     }
 
     #[test]
+    fn last_seen_is_local_time() {
+        let last_seen = |tz: &str| -> String {
+            let o = Command::new(env!("CARGO_BIN_EXE_unifictl"))
+                .arg("--fixtures")
+                .arg(fixtures())
+                .args(["clients", "get", "macbook-pro-0001"])
+                .env("TZ", tz)
+                .output()
+                .unwrap();
+            stdout(&o)
+                .lines()
+                .find(|l| l.starts_with("LAST SEEN"))
+                .unwrap()
+                .to_string()
+        };
+        assert!(last_seen("UTC").ends_with("2026-10-11 10:00"));
+        assert!(last_seen("Asia/Tokyo").ends_with("2026-10-11 19:00"));
+    }
+
+    #[test]
     fn ports_default_to_up_unless_all_ports() {
         let count = |args: &[&str]| -> usize {
             let mut a = vec!["-o", "json", "ports", "list", "--device", "us-8-60w"];

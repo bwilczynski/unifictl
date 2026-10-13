@@ -377,11 +377,11 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
                     StatusFilter::Offline => ClientStatus::Offline,
                 });
                 emit_list(out, &svc.list_clients(status)?, |l| {
-                    render::clients::list(l, *wide, color)
+                    render::clients::list(l, *wide, color, &TimeZone::system())
                 })
             }
             ClientsCommand::Get { id } => emit(out, &svc.get_client(id)?, |c| {
-                render::clients::get(c, color)
+                render::clients::get(c, color, &TimeZone::system())
             }),
             ClientsCommand::Traffic(_) => unreachable!("traffic is handled by run"),
         },
