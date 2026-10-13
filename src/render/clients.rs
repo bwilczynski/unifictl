@@ -1,12 +1,14 @@
 //! clients_list.tmpl, clients_get_{wired,wireless}.tmpl.
 
+use jiff::tz::TimeZone;
+
 use super::Table;
 use super::format::{format_bytes_per_sec, format_last_seen, format_uptime};
 use super::style;
 use crate::model::{ClientConnection, ClientStatus, NetworkClient, NetworkClientList, Rates};
 
 /// Lean by default; `wide` adds identity and link columns after them.
-pub fn list(list: &NetworkClientList, wide: bool, color: bool) -> String {
+pub fn list(list: &NetworkClientList, wide: bool, color: bool, tz: &TimeZone) -> String {
     let mut t = Table::new();
     let mut header = vec!["ID", "NAME", "IP", "STATUS", "CONNECTION", "EXPERIENCE"];
     if wide {
@@ -33,7 +35,7 @@ pub fn list(list: &NetworkClientList, wide: bool, color: bool) -> String {
             style::experience(c.experience, color),
         ];
         if wide {
-            row.extend(wide_cells(c, color));
+            row.extend(wide_cells(c, color, tz));
         }
         t.row(&row.iter().map(String::as_str).collect::<Vec<_>>());
     }
@@ -45,7 +47,7 @@ fn dash() -> String {
 }
 
 /// MAC, UPLINK, SSID, SIGNAL, LINK, DOWN, UP, UPTIME, LAST SEEN.
-fn wide_cells(c: &NetworkClient, color: bool) -> [String; 9] {
+fn wide_cells(c: &NetworkClient, color: bool, tz: &TimeZone) -> [String; 9] {
     let (uplink, ssid, signal, link) = match &c.connected_to {
         ClientConnection::Wired(w) => (
             match (w.device.name.as_str(), w.port) {
@@ -86,11 +88,11 @@ fn wide_cells(c: &NetworkClient, color: bool) -> [String; 9] {
         rate(|r| r.rx_bytes_per_sec, style::down),
         rate(|r| r.tx_bytes_per_sec, style::up),
         c.uptime.map_or_else(dash, format_uptime),
-        c.last_seen.map_or_else(dash, format_last_seen),
+        c.last_seen.map_or_else(dash, |s| format_last_seen(s, tz)),
     ]
 }
 
-pub fn get(c: &NetworkClient, color: bool) -> String {
+pub fn get(c: &NetworkClient, color: bool, tz: &TimeZone) -> String {
     let mut t = Table::new();
     t.row(&["FIELD", "VALUE"]);
     t.row(&["ID", &c.id]);
@@ -137,7 +139,7 @@ pub fn get(c: &NetworkClient, color: bool) -> String {
         t.row(&["UPTIME", &format_uptime(up)]);
     }
     if let Some(seen) = c.last_seen {
-        t.row(&["LAST SEEN", &format_last_seen(seen)]);
+        t.row(&["LAST SEEN", &format_last_seen(seen, tz)]);
     }
     t.finish()
 }
@@ -157,7 +159,12 @@ mod tests {
 
     #[test]
     fn default_list_is_lean_with_experience() {
-        let out = list(&svc().list_clients(None).unwrap(), false, false);
+        let out = list(
+            &svc().list_clients(None).unwrap(),
+            false,
+            false,
+            &TimeZone::UTC,
+        );
         assert_eq!(
             out,
             "\
@@ -180,7 +187,12 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
 
     #[test]
     fn wide_list_adds_columns_after_default() {
-        let out = list(&svc().list_clients(None).unwrap(), true, false);
+        let out = list(
+            &svc().list_clients(None).unwrap(),
+            true,
+            false,
+            &TimeZone::UTC,
+        );
         assert_eq!(
             cells(out.lines().next().unwrap()),
             [
@@ -236,7 +248,12 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
 
     #[test]
     fn wide_list_grades_signal_and_link() {
-        let out = list(&svc().list_clients(None).unwrap(), true, true);
+        let out = list(
+            &svc().list_clients(None).unwrap(),
+            true,
+            true,
+            &TimeZone::UTC,
+        );
         let line = |id: &str| out.lines().find(|l| l.starts_with(id)).unwrap().to_string();
         assert!(line("macbook-pro-0001").contains("\x1b[33m-69 dBm\x1b[0m"));
         assert!(line("sonos-one-sl-l-bb03").contains("\x1b[31m-80 dBm\x1b[0m"));
@@ -259,14 +276,18 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
                 ClientConnection::Wireless(w) => w.device = Default::default(),
             }
         }
-        let out = list(&l, true, false);
+        let out = list(&l, true, false, &TimeZone::UTC);
         let mb = cells(out.lines().find(|x| x.starts_with("macbook")).unwrap());
         assert_eq!(mb[7], "-");
     }
 
     #[test]
     fn wired_detail_fields() {
-        let out = get(&svc().get_client("nas-1-0002").unwrap(), false);
+        let out = get(
+            &svc().get_client("nas-1-0002").unwrap(),
+            false,
+            &TimeZone::UTC,
+        );
         let field = |name: &str| {
             out.lines()
                 .find(|l| l.starts_with(name))
@@ -280,7 +301,11 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
 
     #[test]
     fn offline_wireless_detail_omits_signal_and_uptime() {
-        let out = get(&svc().get_client("kindle-paperwhite-bb04").unwrap(), false);
+        let out = get(
+            &svc().get_client("kindle-paperwhite-bb04").unwrap(),
+            false,
+            &TimeZone::UTC,
+        );
         assert!(
             out.lines()
                 .any(|l| l.starts_with("AP") && l.ends_with("UAP-01"))
@@ -294,7 +319,11 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
 
     #[test]
     fn wireless_detail_shows_health_rows() {
-        let out = get(&svc().get_client("macbook-pro-0001").unwrap(), true);
+        let out = get(
+            &svc().get_client("macbook-pro-0001").unwrap(),
+            true,
+            &TimeZone::UTC,
+        );
         let field = |name: &str| {
             out.lines()
                 .find(|l| l.starts_with(name))
@@ -311,7 +340,11 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
 
     #[test]
     fn wired_detail_grades_link_speed() {
-        let out = get(&svc().get_client("nas-1-0002").unwrap(), true);
+        let out = get(
+            &svc().get_client("nas-1-0002").unwrap(),
+            true,
+            &TimeZone::UTC,
+        );
         assert!(
             out.lines()
                 .any(|l| l.starts_with("LINK SPEED") && l.ends_with("\x1b[32m1 GbE\x1b[0m"))
@@ -321,7 +354,12 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
 
     #[test]
     fn wide_offline_wireless_ssid_is_dash() {
-        let out = list(&svc().list_clients(None).unwrap(), true, false);
+        let out = list(
+            &svc().list_clients(None).unwrap(),
+            true,
+            false,
+            &TimeZone::UTC,
+        );
         let kindle = cells(
             out.lines()
                 .find(|l| l.starts_with("kindle-paperwhite-bb04"))

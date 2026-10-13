@@ -52,11 +52,11 @@ pub fn format_link_speed(s: LinkSpeed) -> &'static str {
     }
 }
 
-/// Epoch seconds → UTC "YYYY-MM-DD HH:MM" (absolute, so output is stable).
-pub fn format_last_seen(epoch: i64) -> String {
+/// Epoch seconds → "YYYY-MM-DD HH:MM" in `tz` (absolute, so output is stable).
+pub fn format_last_seen(epoch: i64, tz: &TimeZone) -> String {
     Timestamp::from_second(epoch)
         .map(|t| {
-            t.to_zoned(TimeZone::UTC)
+            t.to_zoned(tz.clone())
                 .strftime("%Y-%m-%d %H:%M")
                 .to_string()
         })
@@ -108,9 +108,14 @@ mod tests {
     }
 
     #[test]
-    fn last_seen_is_utc_minutes() {
-        assert_eq!(format_last_seen(1791712800), "2026-10-11 10:00");
-        assert_eq!(format_last_seen(0), "1970-01-01 00:00");
+    fn last_seen_is_minutes_in_the_given_zone() {
+        assert_eq!(
+            format_last_seen(1791712800, &TimeZone::UTC),
+            "2026-10-11 10:00"
+        );
+        assert_eq!(format_last_seen(0, &TimeZone::UTC), "1970-01-01 00:00");
+        let tokyo = TimeZone::get("Asia/Tokyo").unwrap();
+        assert_eq!(format_last_seen(1791712800, &tokyo), "2026-10-11 19:00");
     }
 
     #[test]
