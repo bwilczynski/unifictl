@@ -13,7 +13,7 @@ use serde_json::json;
 use super::UnifiApi;
 use super::types::{
     ClientV2, Device, DpiEntry, DpiPage, Envelope, LogQuery, NetworkConf, Site, Sta, SystemLogPage,
-    TrafficReport, WlanConf,
+    TrafficReport, WanHistory, WlanConf,
 };
 use crate::cache::Cache;
 use crate::config::{Auth, Config};
@@ -380,6 +380,19 @@ impl UnifiApi for UnifiClient {
     fn traffic(&self, start_ms: i64, end_ms: i64) -> Result<TrafficReport> {
         let url = format!(
             "{}{}/v2/api/site/{}/traffic?start={start_ms}&end={end_ms}&includeUnidentified=true",
+            self.base_url,
+            self.prefix(),
+            self.site
+        );
+        let body = self.fetch(&url)?;
+        serde_json::from_str(&body).map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))
+    }
+
+    /// Never cached: the default window is the same URL every time, but the
+    /// history behind it moves on.
+    fn wan_history(&self, history_seconds: i64) -> Result<WanHistory> {
+        let url = format!(
+            "{}{}/v2/api/site/{}/aggregated-dashboard?historySeconds={history_seconds}&widgets=wan_history",
             self.base_url,
             self.prefix(),
             self.site
@@ -1107,6 +1120,47 @@ mod tests {
         let r = api_key_client(&server).traffic(1000, 2000).unwrap();
         m.assert();
         assert_eq!(r.client_usage_by_app[0].usage_by_app[0].total_bytes, 9);
+    }
+
+    #[test]
+    fn wan_history_asks_for_the_widget_and_window() {
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/v2/api/site/default/aggregated-dashboard")
+                .query_param("historySeconds", "604800")
+                .query_param("widgets", "wan_history");
+            then.status(200).json_body(json!({
+                "dashboard_meta": {"start_timestamp": 1000, "end_timestamp": 2000},
+                "wan_history": {"wan_history_details": [{"network_group": "WAN", "uptime": 99.5}]}
+            }));
+        });
+        let h = api_key_client(&server).wan_history(604800).unwrap();
+        m.assert();
+        assert_eq!(h.dashboard_meta.unwrap().start_timestamp, 1000);
+        assert_eq!(
+            h.wan_history.unwrap().wan_history_details[0].uptime,
+            Some(99.5)
+        );
+    }
+
+    #[test]
+    fn wan_history_is_never_cached() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/v2/api/site/default/aggregated-dashboard");
+            then.status(200).json_body(json!({}));
+        });
+        let client = api_key_client(&server).with_cache(Cache::new(
+            dir.path().join("c"),
+            Duration::from_secs(60),
+            true,
+        ));
+        client.wan_history(604800).unwrap();
+        client.wan_history(604800).unwrap();
+        m.assert_calls(2);
     }
 
     #[test]

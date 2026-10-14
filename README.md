@@ -88,6 +88,7 @@ unifictl clients list [--status online|offline] [--wide] | get <id> | traffic [<
 unifictl topology [--include-clients] [--include-wireless]
 unifictl ports list [--device ID] [--mode trunk|access] [--state up|down|disabled | --all-ports] [--vlan N] [--wide]
 unifictl vlans|ssids|wans list [--wide] | get <id>
+unifictl wans get <id> [-S WHEN]
 unifictl logs [-n N] [-S WHEN] [-U WHEN] [-p LEVEL] [-r] [-f] [--category CAT] [--device ID] [--client ID]
 ```
 
@@ -99,6 +100,12 @@ IDs are kebab-case names (`us-8-60w`); clients add the last two MAC bytes (`nas-
 for spotting trouble quickly; `wans list` shows each WAN's own uptime and its
 availability over the last 24 hours. `--wide` on any list adds more columns,
 such as MAC, uplink, signal, link speed, live traffic and WAN latency.
+
+`wans get` also lists the WAN's outages over the last 7 days, with start, end
+and duration, and the controller's availability for that window; `--since`
+widens or narrows it (`--since -30d`). The window shown is the one the
+controller covered, which starts on a bucket boundary and goes back at most as
+far as its history.
 
 On a terminal, status cells are coloured (green healthy, red disconnected, dim
 offline/down, yellow disabled), health metrics are green, yellow or red

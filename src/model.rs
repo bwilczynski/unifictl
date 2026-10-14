@@ -511,6 +511,45 @@ pub struct Wan {
     pub dns_servers: Vec<String>,
 }
 
+/// `wans get`: a WAN and its outage history.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WanDetail {
+    #[serde(flatten)]
+    pub wan: Wan,
+    /// `None` when the controller reports no history for this WAN.
+    pub outages: Option<WanOutages>,
+}
+
+/// Outages over the window the controller covered, which ends now.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WanOutages {
+    /// RFC 3339 with the local offset.
+    pub since: String,
+    /// Percent over the window.
+    pub availability: Option<f64>,
+    /// Oldest first.
+    pub items: Vec<WanOutage>,
+    /// Epoch milliseconds, for the text renderer.
+    #[serde(skip)]
+    pub since_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WanOutage {
+    /// RFC 3339 with the local offset.
+    pub start: String,
+    pub end: String,
+    pub duration_seconds: i64,
+    /// Epoch milliseconds, for the text renderer.
+    #[serde(skip)]
+    pub start_ms: i64,
+    #[serde(skip)]
+    pub end_ms: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Ssid {
