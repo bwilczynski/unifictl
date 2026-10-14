@@ -74,6 +74,9 @@ pub struct Device {
     pub uplink: Option<Uplink>,
     pub wan1: Option<WanIface>,
     pub wan2: Option<WanIface>,
+    /// Gateways only, keyed by `wan_networkgroup` ("WAN", "WAN2").
+    #[serde(deserialize_with = "nd")]
+    pub uptime_stats: BTreeMap<String, WanUptimeStats>,
 }
 
 /// One row of a device's vap_table — one per radio per SSID.
@@ -173,6 +176,24 @@ pub struct WanIface {
     pub tx_bytes_r: f64,
     #[serde(rename = "rx_bytes-r", deserialize_with = "nd")]
     pub rx_bytes_r: f64,
+}
+
+/// One WAN's entry in a gateway's `uptime_stats`. `uptime`, `availability`
+/// and `latency_average` are present only while the WAN is up, `downtime`
+/// only while it is down.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct WanUptimeStats {
+    /// Seconds since this WAN came up.
+    pub uptime: Option<i64>,
+    /// Seconds since this WAN went down.
+    pub downtime: Option<i64>,
+    /// Percent over `time_period`.
+    pub availability: Option<f64>,
+    /// Milliseconds, averaged over `time_period`.
+    pub latency_average: Option<f64>,
+    /// Seconds.
+    pub time_period: Option<i64>,
 }
 
 /// Active client from /stat/sta (v1 API).

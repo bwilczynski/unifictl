@@ -28,6 +28,26 @@ pub fn signal(dbm: i64) -> Health {
     }
 }
 
+/// WAN availability in percent, as displayed (two decimals).
+pub fn availability(pct: f64) -> Health {
+    if pct >= 99.9 {
+        Health::Good
+    } else if pct >= 99.0 {
+        Health::Fair
+    } else {
+        Health::Poor
+    }
+}
+
+/// WAN latency in milliseconds.
+pub fn latency(ms: i64) -> Health {
+    match ms {
+        ..50 => Health::Good,
+        50..=99 => Health::Fair,
+        _ => Health::Poor,
+    }
+}
+
 /// A wired link whose maximum is unknown: graded on absolute speed.
 pub fn wired_link(speed: LinkSpeed) -> Health {
     match speed.mbps() {
@@ -72,6 +92,24 @@ mod tests {
         assert_eq!(signal(-68), Health::Fair);
         assert_eq!(signal(-75), Health::Fair);
         assert_eq!(signal(-76), Health::Poor);
+    }
+
+    #[test]
+    fn availability_boundaries() {
+        assert_eq!(availability(100.0), Health::Good);
+        assert_eq!(availability(99.9), Health::Good);
+        assert_eq!(availability(99.89), Health::Fair);
+        assert_eq!(availability(99.0), Health::Fair);
+        assert_eq!(availability(98.99), Health::Poor);
+    }
+
+    #[test]
+    fn latency_boundaries() {
+        assert_eq!(latency(11), Health::Good);
+        assert_eq!(latency(49), Health::Good);
+        assert_eq!(latency(50), Health::Fair);
+        assert_eq!(latency(99), Health::Fair);
+        assert_eq!(latency(100), Health::Poor);
     }
 
     #[test]
