@@ -83,6 +83,18 @@ pub fn port_devices() -> Vec<CompletionCandidate> {
     })
 }
 
+/// Devices that `radios list` covers: access points.
+pub fn access_points() -> Vec<CompletionCandidate> {
+    ids(|svc| {
+        let devices = svc.list_devices()?.items;
+        Ok(devices
+            .into_iter()
+            .filter(|d| d.device_type == DeviceType::AccessPoint)
+            .map(|d| (d.id, d.name))
+            .collect())
+    })
+}
+
 pub fn clients() -> Vec<CompletionCandidate> {
     ids(|svc| {
         let clients = svc.list_clients(None)?.items;

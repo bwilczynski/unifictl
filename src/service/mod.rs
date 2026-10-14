@@ -6,6 +6,7 @@ mod common;
 mod devices;
 mod logs;
 mod ports;
+mod radios;
 mod ssids;
 mod status;
 mod topology;
@@ -15,6 +16,7 @@ mod wans;
 
 pub use logs::{FOLLOW_INTERVAL, Follower, LogFilter, LogPage, RefIndex, backoff, follow_loop};
 pub use ports::PortFilter;
+pub use radios::RadioFilter;
 pub use traffic::{TrafficView, TrafficWindow};
 pub use wans::DEFAULT_OUTAGE_WINDOW_SECONDS;
 

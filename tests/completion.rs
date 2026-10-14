@@ -95,6 +95,13 @@ mod with_fixtures {
     }
 
     #[test]
+    fn radios_device_offers_only_access_points() {
+        let mut got = ids(&["radios", "list", "--device", ""]);
+        got.sort();
+        assert_eq!(got, ["uap-01", "uap-02"]);
+    }
+
+    #[test]
     fn client_ids_complete() {
         assert_eq!(ids(&["clients", "get", "nas"]), ["nas-1-0002"]);
     }

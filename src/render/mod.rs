@@ -8,6 +8,7 @@ pub mod format;
 pub mod health;
 pub mod logs;
 pub mod ports;
+pub mod radios;
 pub mod ssids;
 pub mod status;
 pub mod style;

@@ -48,6 +48,33 @@ pub fn latency(ms: i64) -> Health {
     }
 }
 
+/// Channel utilisation: percent of airtime the channel is busy.
+pub fn utilisation(pct: i64) -> Health {
+    match pct {
+        ..50 => Health::Good,
+        50..=79 => Health::Fair,
+        _ => Health::Poor,
+    }
+}
+
+/// Airtime taken by other networks and noise, percent.
+pub fn interference(pct: i64) -> Health {
+    match pct {
+        ..10 => Health::Good,
+        10..=24 => Health::Fair,
+        _ => Health::Poor,
+    }
+}
+
+/// Share of transmissions retried, percent.
+pub fn retries(pct: i64) -> Health {
+    match pct {
+        ..10 => Health::Good,
+        10..=19 => Health::Fair,
+        _ => Health::Poor,
+    }
+}
+
 /// A wired link whose maximum is unknown: graded on absolute speed.
 pub fn wired_link(speed: LinkSpeed) -> Health {
     match speed.mbps() {
@@ -74,6 +101,31 @@ pub fn uplink(speed: LinkSpeed, max: Option<LinkSpeed>, full_duplex: Option<bool
 mod tests {
     use super::*;
     use crate::model::LinkSpeed;
+
+    #[test]
+    fn utilisation_boundaries() {
+        assert_eq!(utilisation(0), Health::Good);
+        assert_eq!(utilisation(49), Health::Good);
+        assert_eq!(utilisation(50), Health::Fair);
+        assert_eq!(utilisation(79), Health::Fair);
+        assert_eq!(utilisation(80), Health::Poor);
+    }
+
+    #[test]
+    fn interference_boundaries() {
+        assert_eq!(interference(9), Health::Good);
+        assert_eq!(interference(10), Health::Fair);
+        assert_eq!(interference(24), Health::Fair);
+        assert_eq!(interference(25), Health::Poor);
+    }
+
+    #[test]
+    fn retries_boundaries() {
+        assert_eq!(retries(9), Health::Good);
+        assert_eq!(retries(10), Health::Fair);
+        assert_eq!(retries(19), Health::Fair);
+        assert_eq!(retries(20), Health::Poor);
+    }
 
     #[test]
     fn experience_boundaries() {

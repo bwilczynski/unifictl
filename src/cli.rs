@@ -41,7 +41,7 @@ pub struct Cli {
 pub enum OutputFormat {
     Table,
     Json,
-    /// One ID per line (devices, clients, vlans, ssids and wans list)
+    /// One ID per line (devices, clients, vlans, ssids, wans and radios list)
     Ids,
 }
 
@@ -78,6 +78,11 @@ pub enum Command {
     Ports {
         #[command(subcommand)]
         command: PortsCommand,
+    },
+    /// Wi-Fi radios of the access points
+    Radios {
+        #[command(subcommand)]
+        command: RadiosCommand,
     },
     /// VLANs (LAN networks)
     #[command(mut_subcommand("get", |get| get.mut_arg("id", |id| id.add(ArgValueCandidates::new(completion::vlans)))))]
@@ -209,6 +214,22 @@ pub struct PortsListArgs {
     /// Show all ports (overrides the default state=up filter)
     #[arg(long)]
     pub all_ports: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum RadiosCommand {
+    /// List radios across all access points
+    List(RadiosListArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct RadiosListArgs {
+    /// Filter by access point ID
+    #[arg(long, add = ArgValueCandidates::new(completion::access_points))]
+    pub device: Option<String>,
+    /// Show additional columns (TX power, min RSSI, experience)
+    #[arg(long)]
+    pub wide: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

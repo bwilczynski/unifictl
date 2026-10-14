@@ -298,6 +298,7 @@ pub struct AccessPointDetail {
     pub base: NetworkDevice,
     pub num_clients: i64,
     pub connected_clients: Vec<ApClient>,
+    pub radios: Vec<Radio>,
 }
 
 /// Discriminated on `type` (carried in `DeviceBase`).
@@ -325,6 +326,52 @@ pub struct NetworkPort {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct NetworkPortList {
     pub items: Vec<NetworkPort>,
+}
+
+// ---------- radios ----------
+
+/// One Wi-Fi radio of an access point: its configuration and, while the AP
+/// is connected, its live figures. Every figure is `null` when unknown.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Radio {
+    /// `<device-id>/<band>` (`ap-office/2.4g`), or `<device-id>/<name>` when
+    /// the AP has two radios on one band.
+    pub id: String,
+    /// Interface name: `wifi0`, `wifi1`, …
+    pub name: String,
+    /// `2.4G`, `5G`, `6G`, or the controller's code for anything else.
+    pub band: String,
+    pub channel: Option<i64>,
+    /// Channel width, MHz.
+    pub width: Option<i64>,
+    pub tx_power_mode: Option<String>,
+    /// dBm.
+    pub tx_power: Option<i64>,
+    /// dBm; only when the minimum-RSSI kick is enabled.
+    pub min_rssi: Option<i64>,
+    /// Percent of airtime the channel is busy.
+    pub utilisation: Option<i64>,
+    /// Percent of airtime used by others: utilisation minus own RX and TX.
+    pub interference: Option<i64>,
+    /// Percent of transmissions retried.
+    pub retries: Option<f64>,
+    pub clients: Option<i64>,
+    /// The radio's experience score, 0–100.
+    pub satisfaction: Option<i64>,
+}
+
+/// A radio with the access point it belongs to (`radios list`).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct NetworkRadio {
+    #[serde(flatten)]
+    pub radio: Radio,
+    pub device: DeviceRef,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct NetworkRadioList {
+    pub items: Vec<NetworkRadio>,
 }
 
 // ---------- clients ----------
@@ -676,6 +723,12 @@ impl_ids!(
     SsidList,
     WanList
 );
+
+impl Ids for NetworkRadioList {
+    fn ids(&self) -> Vec<&str> {
+        self.items.iter().map(|i| i.radio.id.as_str()).collect()
+    }
+}
 
 /// A client named in a log entry; `id` is `None` for a client no longer in
 /// the client list.
