@@ -426,7 +426,51 @@
           "uptime": 3651360
         }
       ],
-      "satisfaction": 96
+      "satisfaction": 96,
+      "radio_table": [
+        {
+          "name": "wifi0",
+          "radio": "ng",
+          "channel": 6,
+          "ht": "20",
+          "tx_power_mode": "auto",
+          "min_rssi_enabled": false
+        },
+        {
+          "name": "wifi1",
+          "radio": "na",
+          "channel": 36,
+          "ht": "80",
+          "tx_power_mode": "auto",
+          "min_rssi_enabled": false
+        }
+      ],
+      "radio_table_stats": [
+        {
+          "name": "wifi0",
+          "radio": "ng",
+          "channel": 6,
+          "cu_total": 71,
+          "cu_self_rx": 20,
+          "cu_self_tx": 13,
+          "tx_retries_pct": 14.2,
+          "num_sta": 1,
+          "satisfaction": 88,
+          "tx_power": 17
+        },
+        {
+          "name": "wifi1",
+          "radio": "na",
+          "channel": 36,
+          "cu_total": 22,
+          "cu_self_rx": 10,
+          "cu_self_tx": 8,
+          "tx_retries_pct": 3.1,
+          "num_sta": 2,
+          "satisfaction": 97,
+          "tx_power": 20
+        }
+      ]
     },
     {
       "_id": "65f0a3000000000000000004",
@@ -484,7 +528,52 @@
           "uptime": 3651300
         }
       ],
-      "satisfaction": 96
+      "satisfaction": 96,
+      "radio_table": [
+        {
+          "name": "wifi0",
+          "radio": "ng",
+          "channel": 6,
+          "ht": "20",
+          "tx_power_mode": "auto",
+          "min_rssi_enabled": false
+        },
+        {
+          "name": "wifi1",
+          "radio": "na",
+          "channel": 149,
+          "ht": "80",
+          "tx_power_mode": "auto",
+          "min_rssi_enabled": true,
+          "min_rssi": -75
+        }
+      ],
+      "radio_table_stats": [
+        {
+          "name": "wifi0",
+          "radio": "ng",
+          "channel": 6,
+          "cu_total": 68,
+          "cu_self_rx": 18,
+          "cu_self_tx": 15,
+          "tx_retries_pct": 12.4,
+          "num_sta": 1,
+          "satisfaction": 91,
+          "tx_power": 17
+        },
+        {
+          "name": "wifi1",
+          "radio": "na",
+          "channel": 149,
+          "cu_total": 18,
+          "cu_self_rx": 9,
+          "cu_self_tx": 7,
+          "tx_retries_pct": 2.0,
+          "num_sta": 3,
+          "satisfaction": 98,
+          "tx_power": 20
+        }
+      ]
     },
     {
       "_id": "65f0a3000000000000000005",
