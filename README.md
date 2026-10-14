@@ -88,12 +88,13 @@ unifictl devices list [--wide] | get <id> [--all-ports]
 unifictl clients list [--status online|offline] [--wide] | get <id> | traffic [<id> | --by-app] [-S WHEN] [-U WHEN]
 unifictl topology [--include-clients] [--include-wireless]
 unifictl ports list [--device ID] [--mode trunk|access] [--state up|down|disabled | --all-ports] [--vlan N] [--wide]
+unifictl radios list [--device ID] [--wide]
 unifictl vlans|ssids|wans list [--wide] | get <id>
 unifictl wans get <id> [-S WHEN]
 unifictl logs [-n N] [-S WHEN] [-U WHEN] [-p LEVEL] [-r] [-f] [--category CAT] [--device ID] [--client ID]
 ```
 
-Every command takes `-o json` and `--refresh`. `devices`, `clients`, `vlans`, `ssids` and `wans list`,
+Every command takes `-o json` and `--refresh`. `devices`, `clients`, `vlans`, `ssids`, `wans` and `radios list`,
 and `clients traffic`, also take `-o ids`, printing one ID per line for scripts (`unifictl clients list --status offline -o ids | xargs -n1 unifictl clients get`).
 IDs are kebab-case names (`us-8-60w`); clients add the last two MAC bytes (`nas-1-0002`).
 
@@ -110,8 +111,8 @@ far as its history.
 
 On a terminal, status cells are coloured (green healthy, red disconnected, dim
 offline/down, yellow disabled), health metrics are green, yellow or red
-(experience, Wi-Fi signal, link speed against what the link allows, and WAN
-availability and latency),
+(experience, Wi-Fi signal, link speed against what the link allows, WAN
+availability and latency, and radio utilisation, interference and retries),
 download is cyan and upload magenta, and names are blue, in your terminal's own
 palette. `--color always|never` overrides that; `NO_COLOR` turns it off.
 
@@ -193,11 +194,33 @@ Oct 11 08:12:40 internet-and-wan: Internet connection WAN1 ExampleISP on port 5 
   each entry mentions, so `jq` can feed them back into `devices get` or
   `clients get`.
 
+### Radios
+
+Why does a client keep roaming? `radios list` shows every access point radio:
+its channel and width, how busy the channel is (UTIL), how much of that is
+other networks and noise (INTERF), and how often the AP has to resend (RETRY).
+Two APs on the same busy 2.4 GHz channel, both seeing interference, is the
+usual cause of clients bouncing between them.
+
+```sh
+$ unifictl radios list
+AP              BAND  CH   WIDTH  TX    UTIL  INTERF  RETRY  CLIENTS
+AP-Living-Room  2.4G  6    20     auto  68%   35%     12%    1
+AP-Living-Room  5G    149  80     auto  18%   2%      2%     3
+AP-Office       2.4G  6    20     auto  71%   38%     14%    1
+AP-Office       5G    36   80     auto  22%   4%      3%     2
+```
+
+UTIL is green below 50%, yellow to 79%, red from 80%; INTERF green below 10%,
+red from 25%; RETRY green below 10%, red from 20%. `--wide` adds TX power,
+the minimum-RSSI threshold and each radio's experience score; `--device ID`
+narrows to one AP, and `devices get <ap>` shows the same table.
+
 ## Shell completions
 
 `unifictl completions <bash|zsh|fish|powershell|elvish>` prints a script that
 completes subcommands, flags and IDs: `devices get <TAB>`, `clients get
-<TAB>`, `vlans|ssids|wans get <TAB>`, `ports list --device <TAB>` and `logs
+<TAB>`, `vlans|ssids|wans get <TAB>`, `ports|radios list --device <TAB>` and `logs
 --device|--client <TAB>`. Load it
 from your shell's startup file:
 
