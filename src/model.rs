@@ -725,6 +725,131 @@ pub fn screaming_to_camel(s: &str) -> String {
     out
 }
 
+// ---------- status ----------
+
+str_enum!(Verdict { Ok => "ok", Warn => "warn", Error => "error", Info => "info", Idle => "idle", Unknown => "unknown" });
+
+impl Verdict {
+    /// How bad, for combining checks: only warn and error rank above ok.
+    fn rank(self) -> u8 {
+        match self {
+            Self::Error => 2,
+            Self::Warn => 1,
+            Self::Ok | Self::Info | Self::Idle | Self::Unknown => 0,
+        }
+    }
+
+    /// The worse of the two; `self` on a tie.
+    pub fn worse(self, other: Self) -> Self {
+        if other.rank() > self.rank() {
+            other
+        } else {
+            self
+        }
+    }
+}
+
+/// `unifictl status`: one row per area, in display order.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SiteStatus {
+    pub rows: Vec<StatusRow>,
+}
+
+impl SiteStatus {
+    /// Whether any row is an error; `status` then exits 1.
+    pub fn has_error(&self) -> bool {
+        self.rows.iter().any(|r| r.verdict == Verdict::Error)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusRow {
+    pub verdict: Verdict,
+    /// Why the row is `unknown`: what could not be read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<String>,
+    #[serde(flatten)]
+    pub area: StatusArea,
+}
+
+/// The data behind a row; `area` names it in JSON.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(
+    tag = "area",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum StatusArea {
+    Wan {
+        wan: Wan,
+        /// Outages overlapping the last 24 hours, oldest first.
+        outages_24h: Vec<WanOutage>,
+    },
+    Devices {
+        online: usize,
+        total: usize,
+        offline: Vec<DeviceRef>,
+        transitioning: Vec<DeviceTransition>,
+    },
+    Wifi {
+        access_points: usize,
+        /// Online wireless clients; `None` when they could not be read.
+        clients: Option<usize>,
+        /// Worst first.
+        poor_clients: Vec<PoorClient>,
+    },
+    Wired {
+        switches: usize,
+        clients: Option<usize>,
+    },
+    Alarms {
+        /// High and very-high log entries in the last 24 hours.
+        count: Option<usize>,
+        latest: Option<LogEntry>,
+    },
+    Updates {
+        updates: Vec<FirmwareUpdate>,
+    },
+}
+
+impl StatusArea {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Wan { .. } => "wan",
+            Self::Devices { .. } => "devices",
+            Self::Wifi { .. } => "wifi",
+            Self::Wired { .. } => "wired",
+            Self::Alarms { .. } => "alarms",
+            Self::Updates { .. } => "updates",
+        }
+    }
+}
+
+/// A device on its way to connected: `pending`, `upgrading`, `provisioning`
+/// or `adopting`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct DeviceTransition {
+    #[serde(flatten)]
+    pub device: DeviceRef,
+    pub state: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PoorClient {
+    pub id: String,
+    pub name: String,
+    pub experience: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FirmwareUpdate {
+    #[serde(flatten)]
+    pub device: DeviceRef,
+    pub from: String,
+    pub to: String,
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

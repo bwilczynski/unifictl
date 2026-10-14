@@ -68,7 +68,7 @@ fn client_rates(c: &ClientV2) -> Option<Rates> {
 
 /// Live fields (experience, signal, rates, link speed, uptime) only while
 /// online: history keeps stale values.
-fn network_client(c: &ClientV2) -> NetworkClient {
+pub(super) fn network_client(c: &ClientV2) -> NetworkClient {
     let online = c.status == "online";
     let device = upstream_ref(&c.last_uplink_name);
     let connected_to = if c.is_wired {
