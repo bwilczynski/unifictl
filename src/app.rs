@@ -91,6 +91,9 @@ pub fn run(cli: Cli) -> Result<Outcome> {
         return run_config(command, &cli, &env, color);
     }
     let svc = build_service(&cli)?;
+    if let Command::Status = &cli.command {
+        return run_status(&svc, cli.output, color, &env);
+    }
     if let Command::Logs(args) = &cli.command {
         run_logs(&svc, args, cli.output, color, &env)?;
         return Ok(Outcome::ok(String::new()));
@@ -294,6 +297,22 @@ fn run_wan(
     })
 }
 
+/// `status`: needs the clock for its 24-hour window, and exits 1 when any
+/// row is an error.
+fn run_status(
+    svc: &Service,
+    out: OutputFormat,
+    color: bool,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<Outcome> {
+    let tz = TimeZone::system();
+    let status = svc.status(now_ms(env), &tz)?;
+    Ok(Outcome {
+        stdout: emit(out, &status, |s| render::status::table(s, &tz, color))?,
+        code: i32::from(status.has_error()),
+    })
+}
+
 /// `wans get --since` as the controller's `historySeconds`, counted back from
 /// now and rounded up to whole seconds.
 fn outage_window_seconds(since: Option<&str>, now: &Zoned) -> Result<i64> {
@@ -481,6 +500,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
             }),
             WansCommand::Get { .. } => unreachable!("wans get is handled by run"),
         },
+        Command::Status => unreachable!("status is handled by run"),
         Command::Logs(_) => unreachable!("logs streams its output from run"),
         Command::Config { .. } => unreachable!("config commands are handled by run"),
         Command::Completions { shell } => completion::script(*shell),

@@ -98,6 +98,8 @@ pub enum Command {
     },
     /// The controller's system log, like journalctl
     Logs(LogsArgs),
+    /// One screen of site health: WANs, devices, Wi-Fi, wired, alarms, updates
+    Status,
     /// Create the config file, or check it and the controller connection
     Config {
         #[command(subcommand)]
