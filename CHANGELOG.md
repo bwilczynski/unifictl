@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4](https://github.com/bwilczynski/unifictl/compare/v0.3.3...v0.3.4) - 2026-10-14
+
+### Added
+
+- add unifictl radios list
+- unifictl status
+- status table rendering
+- site status verdicts per area
+- read stat/health and device firmware updates
+
+### Fixed
+
+- past alarms warn rather than fail status
+
 ## [0.3.3](https://github.com/bwilczynski/unifictl/compare/v0.3.2...v0.3.3) - 2026-10-14
 
 ### Added
