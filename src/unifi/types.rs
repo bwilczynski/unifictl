@@ -35,6 +35,18 @@ pub struct Site {
     pub desc: String,
 }
 
+/// One entry of `stat/health`: a subsystem (`wan`, `www`, `lan`, `wlan`,
+/// `vpn`) and the controller's verdict on it (`ok`, `warning`, `error`,
+/// `unknown`). The counts it also carries are not used.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct HealthSubsystem {
+    #[serde(deserialize_with = "nd")]
+    pub subsystem: String,
+    #[serde(deserialize_with = "nd")]
+    pub status: String,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct Device {
@@ -55,6 +67,12 @@ pub struct Device {
     pub ip: String,
     #[serde(deserialize_with = "nd")]
     pub version: String,
+    /// Whether the controller has newer firmware for this device.
+    #[serde(deserialize_with = "nd")]
+    pub upgradable: bool,
+    /// The version `upgradable` refers to; empty when there is none.
+    #[serde(deserialize_with = "nd")]
+    pub upgrade_to_firmware: String,
     #[serde(deserialize_with = "nd")]
     pub uptime: i64,
     #[serde(rename = "user-num_sta", deserialize_with = "nd")]
@@ -598,6 +616,18 @@ mod tests {
                 name: "X".into()
             }]
         );
+    }
+
+    #[test]
+    fn firmware_fields_default_when_missing() {
+        let d: Device = serde_json::from_str("{}").unwrap();
+        assert!(!d.upgradable);
+        assert_eq!(d.upgrade_to_firmware, "");
+        let d: Device =
+            serde_json::from_str(r#"{"upgradable": true, "upgrade_to_firmware": "7.1.68"}"#)
+                .unwrap();
+        assert!(d.upgradable);
+        assert_eq!(d.upgrade_to_firmware, "7.1.68");
     }
 
     #[test]

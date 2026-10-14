@@ -8,8 +8,8 @@ use std::thread::ScopedJoinHandle;
 
 use crate::error::Result;
 use types::{
-    ClientV2, Device, DpiEntry, LogQuery, NetworkConf, Sta, SystemLogPage, TrafficReport,
-    WanHistory, WlanConf,
+    ClientV2, Device, DpiEntry, HealthSubsystem, LogQuery, NetworkConf, Sta, SystemLogPage,
+    TrafficReport, WanHistory, WlanConf,
 };
 
 /// Runs independent controller reads concurrently, so a command waits for
@@ -48,6 +48,8 @@ pub trait UnifiApi: Sync {
     fn offline_clients(&self, history_days: i64) -> Result<Vec<ClientV2>>;
     fn wlan_conf(&self) -> Result<Vec<WlanConf>>;
     fn network_conf(&self) -> Result<Vec<NetworkConf>>;
+    /// Per-subsystem health (`stat/health`).
+    fn health(&self) -> Result<Vec<HealthSubsystem>>;
     /// One page of the system log. Never cached.
     fn system_log(&self, query: &LogQuery) -> Result<SystemLogPage>;
     /// Traffic per client and application between two epoch milliseconds.

@@ -6,8 +6,8 @@ use serde::de::DeserializeOwned;
 
 use super::UnifiApi;
 use super::types::{
-    ClientV2, Device, DpiEntry, Envelope, LogQuery, NetworkConf, Sta, SystemLogEntry,
-    SystemLogPage, TrafficReport, WanHistory, WlanConf,
+    ClientV2, Device, DpiEntry, Envelope, HealthSubsystem, LogQuery, NetworkConf, Sta,
+    SystemLogEntry, SystemLogPage, TrafficReport, WanHistory, WlanConf,
 };
 use crate::error::{Error, Result};
 
@@ -30,6 +30,12 @@ pub struct FixtureApi {
     /// API key.
     pub dpi_categories: Option<Vec<DpiEntry>>,
     pub dpi_apps: Option<Vec<DpiEntry>>,
+    /// `unifi-health.json`; `None` when absent, like a controller without
+    /// the endpoint.
+    pub health: Option<Vec<HealthSubsystem>>,
+    /// Reads that fail, by method name (`"active_clients"`, …), simulating
+    /// one endpoint being down.
+    pub fail_only: Vec<&'static str>,
     /// When true every call fails, simulating an unreachable controller.
     pub fail: bool,
 }
@@ -41,8 +47,8 @@ impl FixtureApi {
     }
 
     /// Loads the `unifi-*.json` files (each `{"data": [...]}`, the traffic
-    /// report a bare object) from `dir`; the system log, traffic, WAN history
-    /// and DPI files are optional.
+    /// report a bare object) from `dir`; the system log, traffic, WAN history,
+    /// DPI and health files are optional.
     pub fn load(dir: &Path) -> Result<Self> {
         Ok(Self {
             devices: read(dir, "unifi-devices.json")?,
@@ -56,12 +62,15 @@ impl FixtureApi {
             wan_history: read_object_optional(dir, "unifi-v2-aggregated-dashboard.json")?,
             dpi_categories: read_if_present(dir, "unifi-dpi-categories.json")?,
             dpi_apps: read_if_present(dir, "unifi-dpi-applications.json")?,
+            health: read_if_present(dir, "unifi-health.json")?,
+            fail_only: Vec::new(),
             fail: false,
         })
     }
 
-    fn check(&self) -> Result<()> {
-        if self.fail {
+    /// Fails when every read fails (`fail`) or this one does (`fail_only`).
+    fn check(&self, read: &'static str) -> Result<()> {
+        if self.fail || self.fail_only.contains(&read) {
             return Err(Error::Unifi("unifi request: fixture failure".into()));
         }
         Ok(())
@@ -106,34 +115,34 @@ fn no_catalogue() -> Error {
 
 impl UnifiApi for FixtureApi {
     fn devices(&self) -> Result<Vec<Device>> {
-        self.check()?;
+        self.check("devices")?;
         Ok(self.devices.clone())
     }
     fn clients(&self) -> Result<Vec<Sta>> {
-        self.check()?;
+        self.check("clients")?;
         Ok(self.clients.clone())
     }
     fn active_clients(&self) -> Result<Vec<ClientV2>> {
-        self.check()?;
+        self.check("active_clients")?;
         Ok(self.active.clone())
     }
     fn offline_clients(&self, _history_days: i64) -> Result<Vec<ClientV2>> {
-        self.check()?;
+        self.check("offline_clients")?;
         Ok(self.offline.clone())
     }
     fn wlan_conf(&self) -> Result<Vec<WlanConf>> {
-        self.check()?;
+        self.check("wlan_conf")?;
         Ok(self.wlans.clone())
     }
     fn network_conf(&self) -> Result<Vec<NetworkConf>> {
-        self.check()?;
+        self.check("network_conf")?;
         Ok(self.networks.clone())
     }
 
     /// Applies the window, severities and categories like the controller,
     /// newest first, then pages.
     fn system_log(&self, q: &LogQuery) -> Result<SystemLogPage> {
-        self.check()?;
+        self.check("system_log")?;
         let mut hits: Vec<SystemLogEntry> = self
             .log_entries
             .iter()
@@ -161,23 +170,29 @@ impl UnifiApi for FixtureApi {
 
     /// The whole report, whatever the window.
     fn traffic(&self, _start_ms: i64, _end_ms: i64) -> Result<TrafficReport> {
-        self.check()?;
+        self.check("traffic")?;
         Ok(self.traffic.clone())
     }
     /// The whole history, whatever the window.
     fn wan_history(&self, _history_seconds: i64) -> Result<WanHistory> {
-        self.check()?;
+        self.check("wan_history")?;
         self.wan_history
             .clone()
             .ok_or_else(|| Error::Unifi("unifi request: status 404".into()))
     }
     fn dpi_categories(&self) -> Result<Vec<DpiEntry>> {
-        self.check()?;
+        self.check("dpi_categories")?;
         self.dpi_categories.clone().ok_or_else(no_catalogue)
     }
     fn dpi_applications(&self) -> Result<Vec<DpiEntry>> {
-        self.check()?;
+        self.check("dpi_applications")?;
         self.dpi_apps.clone().ok_or_else(no_catalogue)
+    }
+    fn health(&self) -> Result<Vec<HealthSubsystem>> {
+        self.check("health")?;
+        self.health
+            .clone()
+            .ok_or_else(|| Error::Unifi("unifi request: status 404".into()))
     }
 }
 
@@ -209,6 +224,33 @@ mod tests {
         assert_eq!(api.traffic.total_usage_by_app[0].client_count, 1);
         assert_eq!(api.dpi_categories().unwrap().len(), 4);
         assert_eq!(api.dpi_applications().unwrap()[1].id, 262145);
+        let health = api.health.as_ref().unwrap();
+        assert_eq!(health.len(), 5);
+        assert!(
+            health
+                .iter()
+                .all(|s| s.status == "ok" || s.subsystem == "vpn")
+        );
+        assert!(api.devices[1].upgradable);
+        assert_eq!(api.devices[1].upgrade_to_firmware, "6.8.3.15600");
+        assert!(!api.devices[0].upgradable);
+    }
+
+    #[test]
+    fn fail_only_errors_the_named_reads() {
+        let api = FixtureApi {
+            fail_only: vec!["active_clients", "health"],
+            ..FixtureApi::load(&FixtureApi::default_dir()).unwrap()
+        };
+        assert!(api.active_clients().is_err());
+        assert!(api.health().is_err());
+        assert!(api.devices().is_ok());
+        assert!(api.offline_clients(30).is_ok());
+    }
+
+    #[test]
+    fn missing_health_file_is_like_a_controller_without_it() {
+        assert!(FixtureApi::default().health().is_err());
     }
 
     #[test]
