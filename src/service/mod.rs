@@ -7,6 +7,7 @@ mod devices;
 mod logs;
 mod ports;
 mod ssids;
+mod status;
 mod topology;
 mod traffic;
 mod vlans;

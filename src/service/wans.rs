@@ -49,7 +49,7 @@ impl Service {
     }
 }
 
-fn build_wan(n: &NetworkConf, gw: Option<&Device>) -> Wan {
+pub(super) fn build_wan(n: &NetworkConf, gw: Option<&Device>) -> Wan {
     let iface = resolve_iface(gw, &n.wan_networkgroup);
     let stats = gw.and_then(|g| g.uptime_stats.get(&n.wan_networkgroup));
     let status = if iface.is_some_and(|i| i.up) {
@@ -75,7 +75,7 @@ fn build_wan(n: &NetworkConf, gw: Option<&Device>) -> Wan {
 
 /// `group`'s outages, oldest first; `None` without a window start or an
 /// entry.
-fn outages(h: &WanHistory, group: &str, tz: &TimeZone) -> Option<WanOutages> {
+pub(super) fn outages(h: &WanHistory, group: &str, tz: &TimeZone) -> Option<WanOutages> {
     let since_ms = Some(h.dashboard_meta.as_ref()?.start_timestamp).filter(|&t| t > 0)?;
     let detail = h
         .wan_history
@@ -114,7 +114,7 @@ fn rfc3339(ms: i64, tz: &TimeZone) -> String {
         .to_string()
 }
 
-fn find_gateway(devices: &[Device]) -> Option<&Device> {
+pub(super) fn find_gateway(devices: &[Device]) -> Option<&Device> {
     devices.iter().find(|d| is_gateway_type(&d.kind))
 }
 
