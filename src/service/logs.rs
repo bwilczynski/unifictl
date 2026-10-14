@@ -669,8 +669,8 @@ mod tests {
 
     use crate::unifi::UnifiApi;
     use crate::unifi::types::{
-        ClientV2, Device, DpiEntry, LogQuery, NetworkConf, Sta, SystemLogPage, TrafficReport,
-        WanHistory, WlanConf,
+        ClientV2, Device, DpiEntry, HealthSubsystem, LogQuery, NetworkConf, Sta, SystemLogPage,
+        TrafficReport, WanHistory, WlanConf,
     };
 
     fn ids(page: &LogPage) -> Vec<&str> {
@@ -844,6 +844,9 @@ mod tests {
         }
         fn network_conf(&self) -> Result<Vec<NetworkConf>> {
             self.inner.network_conf()
+        }
+        fn health(&self) -> Result<Vec<HealthSubsystem>> {
+            self.inner.health()
         }
         fn system_log(&self, q: &LogQuery) -> Result<SystemLogPage> {
             self.queries.lock().unwrap().push(q.clone());

@@ -1,0 +1,10 @@
+{
+  "meta": {"rc": "ok"},
+  "data": [
+    {"subsystem": "wlan", "status": "ok", "num_ap": 2, "num_user": 2, "num_disconnected": 0},
+    {"subsystem": "wan", "status": "ok", "isp_name": "Example ISP", "wan_ip": "203.0.113.1"},
+    {"subsystem": "www", "status": "ok", "latency": 13, "drops": 0},
+    {"subsystem": "lan", "status": "ok", "num_sw": 4, "num_user": 1},
+    {"subsystem": "vpn", "status": "unknown"}
+  ]
+}

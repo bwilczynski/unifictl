@@ -12,8 +12,8 @@ use serde_json::json;
 
 use super::UnifiApi;
 use super::types::{
-    ClientV2, Device, DpiEntry, DpiPage, Envelope, LogQuery, NetworkConf, Site, Sta, SystemLogPage,
-    TrafficReport, WanHistory, WlanConf,
+    ClientV2, Device, DpiEntry, DpiPage, Envelope, HealthSubsystem, LogQuery, NetworkConf, Site,
+    Sta, SystemLogPage, TrafficReport, WanHistory, WlanConf,
 };
 use crate::cache::Cache;
 use crate::config::{Auth, Config};
@@ -365,6 +365,10 @@ impl UnifiApi for UnifiClient {
         self.get_data("rest/networkconf")
     }
 
+    fn health(&self) -> Result<Vec<HealthSubsystem>> {
+        self.get_data("stat/health")
+    }
+
     fn system_log(&self, query: &LogQuery) -> Result<SystemLogPage> {
         let url = format!(
             "{}{}/v2/api/site/{}/system-log/all",
@@ -492,6 +496,29 @@ mod tests {
             password: "pw".into(),
         };
         UnifiClient::with_base_url(server.base_url(), auth, "lab".into(), false).unwrap()
+    }
+
+    #[test]
+    fn health_reads_stat_health() {
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/api/s/default/stat/health")
+                .header("X-API-KEY", "k");
+            then.status(200)
+                .json_body(json!({"meta": {"rc": "ok"}, "data": [
+                    {"subsystem": "wlan", "status": "ok", "num_ap": 2},
+                    {"subsystem": "vpn", "status": "unknown"}
+                ]}));
+        });
+        let h = api_key_client(&server).health().unwrap();
+        m.assert();
+        assert_eq!(h.len(), 2);
+        assert_eq!(
+            (h[0].subsystem.as_str(), h[0].status.as_str()),
+            ("wlan", "ok")
+        );
+        assert_eq!(h[1].status, "unknown");
     }
 
     #[test]
