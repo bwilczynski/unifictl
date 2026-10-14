@@ -293,9 +293,8 @@ fn alarms_row(log: Option<&[SystemLogEntry]>, tz: &TimeZone) -> StatusRow {
             },
         );
     };
-    let verdict = if log.iter().any(|e| e.severity == "VERY_HIGH") {
-        Verdict::Error
-    } else if log.is_empty() {
+    // Entries are history; `error` is kept for what is wrong now.
+    let verdict = if log.is_empty() {
         Verdict::Ok
     } else {
         Verdict::Warn
@@ -623,7 +622,7 @@ mod tests {
     }
 
     #[test]
-    fn high_severity_entries_in_the_window_are_alarms() {
+    fn high_severity_entries_in_the_window_are_alarms_but_never_errors() {
         let mut api = fixtures();
         api.log_entries[2].timestamp = NOW - 3_600_000; // HIGH, THREAT_DETECTED
         let s = status(api.clone());
@@ -638,7 +637,7 @@ mod tests {
         api.log_entries[0].timestamp = NOW - 7_200_000; // VERY_HIGH, older
         let s = status(api);
         let row = area(&s, "alarms");
-        assert_eq!(row.verdict, Verdict::Error);
+        assert_eq!(row.verdict, Verdict::Warn, "a past event is never an error");
         let StatusArea::Alarms { count, latest } = &row.area else {
             panic!()
         };

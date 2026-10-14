@@ -84,7 +84,7 @@ anything else (`unknown`, missing subsystem) adds nothing.
 | DEVICES | `stat/device` `state` | any device in state 0 (offline), 6 (heartbeat missed), 9, 10 (adoption failed) or 11 (isolated) | any in state 2 (pending), 4 (upgrading), 5 (provisioning) or 7 (adopting) | ok |
 | WI-FI | APs from `stat/device`; online wireless clients from v2 `clients/active`; health `wlan` | — | any client with experience < 50, or health `warning` | health status, else ok |
 | WIRED | switches from `stat/device`; online wired clients; health `lan` | — | — | health status, else ok |
-| ALARMS | system log, last 24h, severity high and above | any very-high entry | any high entry | ok |
+| ALARMS | system log, last 24h, severity high and above | — (a log entry is history; `error` is kept for what is wrong now) | any high or very-high entry | ok |
 | UPDATES | `stat/device` | — | — | `info` when any device is upgradable, else ok |
 
 Health `error` on `wlan` or `lan` makes that row `error` even though our own
