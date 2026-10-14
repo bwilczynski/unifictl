@@ -9,6 +9,7 @@ pub mod health;
 pub mod logs;
 pub mod ports;
 pub mod ssids;
+pub mod status;
 pub mod style;
 pub mod topology;
 pub mod traffic;

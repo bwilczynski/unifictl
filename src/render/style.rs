@@ -3,7 +3,7 @@
 
 use super::format::format_link_speed;
 use super::health::{self, Health};
-use crate::model::{AppRef, ClientStatus, DeviceStatus, LinkSpeed, PortState, WanStatus};
+use crate::model::{AppRef, ClientStatus, DeviceStatus, LinkSpeed, PortState, Verdict, WanStatus};
 use crate::setup::check::Status;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -152,6 +152,18 @@ pub fn port_state(s: PortState, on: bool) -> String {
     paint(s.as_str(), p, on)
 }
 
+/// A `status` verdict: idle and unknown recede like offline clients.
+pub fn verdict(v: Verdict, on: bool) -> String {
+    let p = match v {
+        Verdict::Ok => Paint::Green,
+        Verdict::Warn => Paint::Yellow,
+        Verdict::Error => Paint::Red,
+        Verdict::Info => Paint::Blue,
+        Verdict::Idle | Verdict::Unknown => Paint::Dim,
+    };
+    paint(v.as_str(), p, on)
+}
+
 /// A name, blue like file names in `eza`.
 pub fn name(text: &str, on: bool) -> String {
     paint(text, Paint::Blue, on)
@@ -191,6 +203,17 @@ mod tests {
     fn paint_wraps_only_when_on() {
         assert_eq!(paint("up", Paint::Green, true), "\x1b[32mup\x1b[0m");
         assert_eq!(paint("up", Paint::Green, false), "up");
+    }
+
+    #[test]
+    fn verdicts_map_to_colours() {
+        assert_eq!(verdict(Verdict::Ok, true), "\x1b[32mok\x1b[0m");
+        assert_eq!(verdict(Verdict::Warn, true), "\x1b[33mwarn\x1b[0m");
+        assert_eq!(verdict(Verdict::Error, true), "\x1b[31merror\x1b[0m");
+        assert_eq!(verdict(Verdict::Info, true), "\x1b[34minfo\x1b[0m");
+        assert_eq!(verdict(Verdict::Idle, true), "\x1b[2midle\x1b[0m");
+        assert_eq!(verdict(Verdict::Unknown, true), "\x1b[2munknown\x1b[0m");
+        assert_eq!(verdict(Verdict::Warn, false), "warn");
     }
 
     #[test]
