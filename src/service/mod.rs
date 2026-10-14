@@ -15,6 +15,7 @@ mod wans;
 pub use logs::{FOLLOW_INTERVAL, Follower, LogFilter, LogPage, RefIndex, backoff, follow_loop};
 pub use ports::PortFilter;
 pub use traffic::{TrafficView, TrafficWindow};
+pub use wans::DEFAULT_OUTAGE_WINDOW_SECONDS;
 
 use crate::unifi::UnifiApi;
 

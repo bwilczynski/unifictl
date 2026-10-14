@@ -491,6 +491,58 @@ pub struct DpiEntry {
     pub name: String,
 }
 
+/// `/v2/api/site/{site}/aggregated-dashboard?widgets=wan_history`: the web
+/// dashboard's WAN history. Other widgets, sent by controllers that ignore
+/// `widgets`, are skipped.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct WanHistory {
+    pub dashboard_meta: Option<DashboardMeta>,
+    pub wan_history: Option<WanHistoryWidget>,
+}
+
+/// The window the controller actually covered, epoch milliseconds. It starts
+/// at or after the requested one (aligned to a bucket, or as far back as
+/// history goes).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct DashboardMeta {
+    #[serde(deserialize_with = "nd")]
+    pub start_timestamp: i64,
+    #[serde(deserialize_with = "nd")]
+    pub end_timestamp: i64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct WanHistoryWidget {
+    #[serde(deserialize_with = "nd")]
+    pub wan_history_details: Vec<WanHistoryDetail>,
+}
+
+/// One WAN's history. A WAN that has never been up has no entry.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct WanHistoryDetail {
+    /// `WAN`, `WAN2`: the network's `wan_networkgroup`.
+    #[serde(deserialize_with = "nd")]
+    pub network_group: String,
+    /// Availability in percent over the window.
+    pub uptime: Option<f64>,
+    #[serde(deserialize_with = "nd")]
+    pub downtime_history: Vec<WanDowntime>,
+}
+
+/// One outage: start in epoch milliseconds and its length.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct WanDowntime {
+    #[serde(deserialize_with = "nd")]
+    pub timestamp: i64,
+    #[serde(deserialize_with = "nd")]
+    pub downtime_in_seconds: i64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,5 +623,52 @@ mod tests {
         assert_eq!(c.wifi_experience_score, None);
         let c: ClientV2 = serde_json::from_str(r#"{"wifi_experience_score": 91.0}"#).unwrap();
         assert_eq!(c.wifi_experience_score, Some(91.0));
+    }
+
+    #[test]
+    fn wan_history_decodes_and_tolerates_nulls() {
+        let h: WanHistory = serde_json::from_str(
+            r#"{"dashboard_meta": {"start_timestamp": 1000, "end_timestamp": 2000, "widgets": ["wan_history"]},
+                "wan_history": {"wan_history_details": [
+                  {"network_group": "WAN", "isp_name": "Example ISP", "isp_asn": 64500, "uptime": 99.95,
+                   "downtime_history": [{"id": "x", "timestamp": 1500, "downtime_in_seconds": 95, "wan_network_group": "WAN"}],
+                   "health_history": [{"timestamp": 1000, "wan_downtime": false}]},
+                  {"network_group": "WAN2", "uptime": null, "downtime_history": null}
+                ]}}"#,
+        )
+        .unwrap();
+        let meta = h.dashboard_meta.unwrap();
+        assert_eq!((meta.start_timestamp, meta.end_timestamp), (1000, 2000));
+        let d = &h.wan_history.as_ref().unwrap().wan_history_details;
+        assert_eq!(d[0].network_group, "WAN");
+        assert_eq!(d[0].uptime, Some(99.95));
+        assert_eq!(d[0].downtime_history[0].timestamp, 1500);
+        assert_eq!(d[0].downtime_history[0].downtime_in_seconds, 95);
+        assert_eq!(d[1].uptime, None);
+        assert!(d[1].downtime_history.is_empty());
+    }
+
+    #[test]
+    fn wan_history_ignores_other_widgets() {
+        let h: WanHistory = serde_json::from_str(
+            r#"{"radio_activity": {"x": [1, 2]}, "wan": {"y": 1},
+                "dashboard_meta": {"start_timestamp": 1, "end_timestamp": 2},
+                "wan_history": {"wan_history_details": [{"network_group": "WAN", "uptime": 100}]}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            h.wan_history.unwrap().wan_history_details[0].uptime,
+            Some(100.0)
+        );
+    }
+
+    #[test]
+    fn wan_history_missing_parts_are_none() {
+        let h: WanHistory = serde_json::from_str("{}").unwrap();
+        assert!(h.dashboard_meta.is_none());
+        assert!(h.wan_history.is_none());
+        let h: WanHistory =
+            serde_json::from_str(r#"{"dashboard_meta": null, "wan_history": null}"#).unwrap();
+        assert!(h.dashboard_meta.is_none() && h.wan_history.is_none());
     }
 }

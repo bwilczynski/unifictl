@@ -8,7 +8,8 @@ use std::thread::ScopedJoinHandle;
 
 use crate::error::Result;
 use types::{
-    ClientV2, Device, DpiEntry, LogQuery, NetworkConf, Sta, SystemLogPage, TrafficReport, WlanConf,
+    ClientV2, Device, DpiEntry, LogQuery, NetworkConf, Sta, SystemLogPage, TrafficReport,
+    WanHistory, WlanConf,
 };
 
 /// Runs independent controller reads concurrently, so a command waits for
@@ -52,6 +53,9 @@ pub trait UnifiApi: Sync {
     /// Traffic per client and application between two epoch milliseconds.
     /// Never cached.
     fn traffic(&self, start_ms: i64, end_ms: i64) -> Result<TrafficReport>;
+    /// The dashboard's WAN history over the last `history_seconds`. Never
+    /// cached.
+    fn wan_history(&self, history_seconds: i64) -> Result<WanHistory>;
     /// DPI categories by number; needs an API key (Integration API).
     fn dpi_categories(&self) -> Result<Vec<DpiEntry>>;
     /// DPI applications by `category << 16 | application`; needs an API key.

@@ -1,0 +1,24 @@
+{
+  "dashboard_meta": {
+    "start_timestamp": 1791158400000,
+    "end_timestamp": 1791720000000,
+    "widgets": ["wan_history"]
+  },
+  "wan_history": {
+    "wan_history_details": [
+      {
+        "network_group": "WAN",
+        "isp_name": "Example ISP",
+        "isp_asn": 64500,
+        "uptime": 99.95,
+        "downtime_history": [
+          {"id": "000000000000000000000001", "timestamp": 1791256365250, "downtime_in_seconds": 95, "wan_network_group": "WAN"},
+          {"id": "000000000000000000000002", "timestamp": 1791582008750, "downtime_in_seconds": 41, "wan_network_group": "WAN"}
+        ],
+        "health_history": [
+          {"timestamp": 1791158400000, "wan_downtime": false, "packet_loss": false, "high_latency": false, "failover_wan_active": false, "wan2_failover_active": false}
+        ]
+      }
+    ]
+  }
+}

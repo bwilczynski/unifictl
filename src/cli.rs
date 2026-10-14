@@ -92,10 +92,9 @@ pub enum Command {
         command: LookupCommand,
     },
     /// WAN uplinks
-    #[command(mut_subcommand("get", |get| get.mut_arg("id", |id| id.add(ArgValueCandidates::new(completion::wans)))))]
     Wans {
         #[command(subcommand)]
-        command: LookupCommand,
+        command: WansCommand,
     },
     /// The controller's system log, like journalctl
     Logs(LogsArgs),
@@ -312,6 +311,25 @@ pub enum LookupCommand {
     Get {
         /// ID, as shown by `list`
         id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum WansCommand {
+    /// List all
+    List {
+        /// Show additional columns
+        #[arg(long)]
+        wide: bool,
+    },
+    /// Show one, with its outages
+    Get {
+        /// ID, as shown by `list`
+        #[arg(add = ArgValueCandidates::new(completion::wans))]
+        id: String,
+        /// Outages at or after WHEN [default: 7 days ago]: today, yesterday, -2h, "2h ago", YYYY-MM-DD [HH:MM[:SS]]
+        #[arg(short = 'S', long, value_name = "WHEN", allow_hyphen_values = true)]
+        since: Option<String>,
     },
 }
 

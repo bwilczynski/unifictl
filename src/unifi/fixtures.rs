@@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
 use super::UnifiApi;
 use super::types::{
     ClientV2, Device, DpiEntry, Envelope, LogQuery, NetworkConf, Sta, SystemLogEntry,
-    SystemLogPage, TrafficReport, WlanConf,
+    SystemLogPage, TrafficReport, WanHistory, WlanConf,
 };
 use crate::error::{Error, Result};
 
@@ -23,6 +23,9 @@ pub struct FixtureApi {
     pub log_entries: Vec<SystemLogEntry>,
     /// `unifi-v2-traffic.json`; empty when absent.
     pub traffic: TrafficReport,
+    /// `unifi-v2-aggregated-dashboard.json`; `None` when absent, like a
+    /// controller without the endpoint.
+    pub wan_history: Option<WanHistory>,
     /// `unifi-dpi-*.json`; `None` when absent, like a controller without an
     /// API key.
     pub dpi_categories: Option<Vec<DpiEntry>>,
@@ -38,8 +41,8 @@ impl FixtureApi {
     }
 
     /// Loads the `unifi-*.json` files (each `{"data": [...]}`, the traffic
-    /// report a bare object) from `dir`; the system log, traffic and DPI
-    /// files are optional.
+    /// report a bare object) from `dir`; the system log, traffic, WAN history
+    /// and DPI files are optional.
     pub fn load(dir: &Path) -> Result<Self> {
         Ok(Self {
             devices: read(dir, "unifi-devices.json")?,
@@ -50,6 +53,7 @@ impl FixtureApi {
             networks: read(dir, "unifi-networkconf.json")?,
             log_entries: read_optional(dir, "unifi-system-log.json")?,
             traffic: read_object_optional(dir, "unifi-v2-traffic.json")?,
+            wan_history: read_object_optional(dir, "unifi-v2-aggregated-dashboard.json")?,
             dpi_categories: read_if_present(dir, "unifi-dpi-categories.json")?,
             dpi_apps: read_if_present(dir, "unifi-dpi-applications.json")?,
             fail: false,
@@ -159,6 +163,13 @@ impl UnifiApi for FixtureApi {
     fn traffic(&self, _start_ms: i64, _end_ms: i64) -> Result<TrafficReport> {
         self.check()?;
         Ok(self.traffic.clone())
+    }
+    /// The whole history, whatever the window.
+    fn wan_history(&self, _history_seconds: i64) -> Result<WanHistory> {
+        self.check()?;
+        self.wan_history
+            .clone()
+            .ok_or_else(|| Error::Unifi("unifi request: status 404".into()))
     }
     fn dpi_categories(&self) -> Result<Vec<DpiEntry>> {
         self.check()?;

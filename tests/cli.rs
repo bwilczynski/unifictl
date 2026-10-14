@@ -81,6 +81,7 @@ mod with_fixtures {
             &["ports", "list", "--all-ports"],
             &["wans", "list"],
             &["wans", "get", "internet-2"],
+            &["wans", "get", "internet-1"],
             &["topology", "--include-clients"],
             &["devices", "get", "cgf-01"],
             &["vlans", "list"],
@@ -153,8 +154,12 @@ mod with_fixtures {
                 serde_json::from_slice(&run(&["-o", "json", cmd, "list"]).stdout).unwrap();
             for item in list["items"].as_array().unwrap() {
                 let id = item["id"].as_str().unwrap();
-                let got: serde_json::Value =
+                let mut got: serde_json::Value =
                     serde_json::from_slice(&run(&["-o", "json", cmd, "get", id]).stdout).unwrap();
+                // `wans get` adds the outage history on top of the list item.
+                if cmd == "wans" {
+                    got.as_object_mut().unwrap().remove("outages");
+                }
                 assert_eq!(&got, item, "{cmd} {id}");
             }
         }
@@ -787,6 +792,73 @@ mod with_fixtures {
         let out = ok_out(&traffic(&["--by-app", "-o", "json"]));
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["items"][0]["clientCount"], 1);
+    }
+
+    fn wans_get(args: &[&str]) -> Output {
+        Command::new(env!("CARGO_BIN_EXE_unifictl"))
+            .arg("--fixtures")
+            .arg(fixtures())
+            .args(["wans", "get"])
+            .args(args)
+            .env("TZ", "UTC")
+            .env("UNIFICTL_NOW", "2026-10-11T12:00:00Z")
+            .output()
+            .unwrap()
+    }
+
+    #[test]
+    fn wans_get_shows_outages() {
+        let out = ok_out(&wans_get(&["internet-1"]));
+        let rows = cells(&out);
+        let n = rows.iter().position(|r| r[0] == "OUTAGES").unwrap();
+        assert_eq!(rows[n][1], "2 since Oct 05 00:00 (99.95% available)");
+        assert_eq!(rows[n + 2], ["START", "END", "DURATION"]);
+        assert_eq!(
+            rows[n + 3],
+            ["Oct 06 03:12:45", "Oct 06 03:14:20", "1m 35s"]
+        );
+        assert_eq!(rows[n + 4], ["Oct 09 21:40:08", "Oct 09 21:40:49", "41s"]);
+    }
+
+    #[test]
+    fn wans_get_json_carries_outages() {
+        let v: serde_json::Value =
+            serde_json::from_str(&ok_out(&wans_get(&["internet-1", "-o", "json"]))).unwrap();
+        assert_eq!(v["id"], "internet-1");
+        assert_eq!(v["outages"]["since"], "2026-10-05T00:00:00+00:00");
+        assert_eq!(v["outages"]["availability"], 99.95);
+        let first = &v["outages"]["items"][0];
+        assert_eq!(first["start"], "2026-10-06T03:12:45+00:00");
+        assert_eq!(first["end"], "2026-10-06T03:14:20+00:00");
+        assert_eq!(first["durationSeconds"], 95);
+        assert!(first.get("startMs").is_none());
+    }
+
+    #[test]
+    fn wans_get_without_history_entry_has_no_outages() {
+        let out = ok_out(&wans_get(&["internet-2"]));
+        assert!(!out.contains("OUTAGES"), "{out}");
+        let v: serde_json::Value =
+            serde_json::from_str(&ok_out(&wans_get(&["internet-2", "-o", "json"]))).unwrap();
+        assert!(v["outages"].is_null());
+    }
+
+    #[test]
+    fn wans_get_since() {
+        ok_out(&wans_get(&["internet-1", "--since", "-30d"]));
+        ok_out(&wans_get(&["internet-1", "-S", "2026-10-01"]));
+        let o = wans_get(&["internet-1", "--since", "+1h"]);
+        assert_eq!(o.status.code(), Some(1));
+        assert_eq!(
+            String::from_utf8_lossy(&o.stderr),
+            "Error: --since must be in the past\n"
+        );
+    }
+
+    #[test]
+    fn wans_list_json_has_no_outages() {
+        let out = stdout(&run(&["wans", "list", "-o", "json"]));
+        assert!(!out.contains("outages"), "{out}");
     }
 
     #[test]

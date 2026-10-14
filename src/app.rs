@@ -11,14 +11,17 @@ use crate::cache::Cache;
 use crate::cli::{
     CategoryArg, Cli, ClientsCommand, ColorMode, Command, ConfigCommand, DevicesCommand, LogsArgs,
     LookupCommand, ModeFilter, OutputFormat, PortsCommand, PriorityArg, StateFilter, StatusFilter,
-    TrafficArgs,
+    TrafficArgs, WansCommand,
 };
 use crate::completion;
 use crate::config;
 use crate::error::{Error, Result};
 use crate::model::{ClientStatus, Ids, LogEntry, LogSeverity, PortState, VlanMode};
 use crate::render;
-use crate::service::{LogFilter, PortFilter, Service, TrafficView, TrafficWindow, follow_loop};
+use crate::service::{
+    DEFAULT_OUTAGE_WINDOW_SECONDS, LogFilter, PortFilter, Service, TrafficView, TrafficWindow,
+    follow_loop,
+};
 use crate::setup;
 use crate::timespec;
 use crate::unifi::client::UnifiClient;
@@ -97,6 +100,12 @@ pub fn run(cli: Cli) -> Result<Outcome> {
     } = &cli.command
     {
         return run_traffic(&svc, args, cli.output, color, &env).map(Outcome::ok);
+    }
+    if let Command::Wans {
+        command: WansCommand::Get { id, since },
+    } = &cli.command
+    {
+        return run_wan(&svc, id, since.as_deref(), cli.output, color, &env).map(Outcome::ok);
     }
     execute(&svc, &cli.command, cli.output, color).map(Outcome::ok)
 }
@@ -269,6 +278,35 @@ fn run_traffic(
     }
 }
 
+/// `wans get`: needs the clock for its outage window.
+fn run_wan(
+    svc: &Service,
+    id: &str,
+    since: Option<&str>,
+    out: OutputFormat,
+    color: bool,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<String> {
+    let tz = TimeZone::system();
+    let window = outage_window_seconds(since, &now(env).to_zoned(tz.clone()))?;
+    emit(out, &svc.get_wan(id, window, &tz)?, |w| {
+        render::wans::get(w, &tz, color)
+    })
+}
+
+/// `wans get --since` as the controller's `historySeconds`, counted back from
+/// now and rounded up to whole seconds.
+fn outage_window_seconds(since: Option<&str>, now: &Zoned) -> Result<i64> {
+    let Some(s) = since else {
+        return Ok(DEFAULT_OUTAGE_WINDOW_SECONDS);
+    };
+    let ms = now.timestamp().as_millisecond() - timespec::parse(s, now)?.as_millisecond();
+    if ms <= 0 {
+        return Err(Error::Other("--since must be in the past".into()));
+    }
+    Ok((ms + 999) / 1000)
+}
+
 /// The `--since`/`--until` window: `--until` defaults to now, `--since` to a
 /// day before it.
 fn traffic_window(since: Option<&str>, until: Option<&str>, now: &Zoned) -> Result<TrafficWindow> {
@@ -438,12 +476,10 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
             }
         },
         Command::Wans { command } => match command {
-            LookupCommand::List { wide } => emit_list(out, &svc.list_wans()?, |l| {
+            WansCommand::List { wide } => emit_list(out, &svc.list_wans()?, |l| {
                 render::wans::list(l, *wide, color)
             }),
-            LookupCommand::Get { id } => {
-                emit(out, &svc.get_wan(id)?, |w| render::wans::get(w, color))
-            }
+            WansCommand::Get { .. } => unreachable!("wans get is handled by run"),
         },
         Command::Logs(_) => unreachable!("logs streams its output from run"),
         Command::Config { .. } => unreachable!("config commands are handled by run"),
@@ -497,7 +533,7 @@ fn lists_ids(cmd: &Command) -> bool {
         } | Command::Ssids {
             command: LookupCommand::List { .. }
         } | Command::Wans {
-            command: LookupCommand::List { .. }
+            command: WansCommand::List { .. }
         }
     )
 }
@@ -627,5 +663,46 @@ mod tests {
     fn traffic_window_since_after_until_is_an_error() {
         let err = traffic_window(Some("today"), Some("yesterday"), &noon()).unwrap_err();
         assert_eq!(err.to_string(), "--since is after --until");
+    }
+
+    #[test]
+    fn history_seconds_default_is_a_week() {
+        assert_eq!(outage_window_seconds(None, &noon()).unwrap(), 604_800);
+    }
+
+    #[test]
+    fn history_seconds_from_relative_and_absolute_times() {
+        let secs = |s| outage_window_seconds(Some(s), &noon()).unwrap();
+        assert_eq!(secs("-30d"), 30 * 86_400);
+        assert_eq!(secs("30d ago"), 30 * 86_400);
+        assert_eq!(secs("today"), 12 * 3_600 + 30);
+        assert_eq!(secs("2026-10-10"), 36 * 3_600 + 30);
+    }
+
+    #[test]
+    fn history_seconds_rounds_up_to_whole_seconds() {
+        let now = "2026-10-11T12:00:30.5Z"
+            .parse::<Timestamp>()
+            .unwrap()
+            .to_zoned(TimeZone::UTC);
+        assert_eq!(outage_window_seconds(Some("-1h"), &now).unwrap(), 3_600);
+        assert_eq!(
+            outage_window_seconds(Some("2026-10-11 12:00:30"), &now).unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn history_seconds_rejects_now_and_the_future() {
+        for s in ["now", "+1h", "tomorrow"] {
+            let err = outage_window_seconds(Some(s), &noon()).unwrap_err();
+            assert_eq!(err.to_string(), "--since must be in the past", "{s}");
+        }
+    }
+
+    #[test]
+    fn history_seconds_rejects_a_bare_span() {
+        let err = outage_window_seconds(Some("30d"), &noon()).unwrap_err();
+        assert!(err.to_string().starts_with("invalid time \"30d\""), "{err}");
     }
 }
