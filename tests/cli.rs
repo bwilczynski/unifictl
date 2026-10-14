@@ -95,6 +95,9 @@ mod with_fixtures {
             &["wans", "list", "--wide"],
             &["ports", "list", "--wide"],
             &["clients", "get", "macbook-pro-0001"],
+            &["radios", "list"],
+            &["radios", "list", "--wide"],
+            &["devices", "get", "uap-01"],
         ] {
             let plain = stdout(&run(args));
             let mut colored_args = vec!["--color", "always"];
@@ -105,6 +108,61 @@ mod with_fixtures {
             assert!(colored.contains("\x1b["), "{args:?}: not coloured");
             assert_eq!(strip_ansi(&colored), plain, "{args:?}: layout changed");
         }
+    }
+
+    #[test]
+    fn radios_list_table() {
+        let o = run(&["radios", "list"]);
+        assert!(o.status.success());
+        let out = stdout(&o);
+        let rows: Vec<Vec<&str>> = out
+            .lines()
+            .map(|l| l.split_whitespace().collect())
+            .collect();
+        assert_eq!(
+            rows[0],
+            [
+                "AP", "BAND", "CH", "WIDTH", "TX", "UTIL", "INTERF", "RETRY", "CLIENTS"
+            ]
+        );
+        assert_eq!(
+            rows[1],
+            ["UAP-01", "2.4G", "11", "20", "-", "16%", "1%", "26%", "4"]
+        );
+        assert_eq!(
+            rows[2],
+            ["UAP-01", "5G", "116", "80", "-", "4%", "1%", "23%", "2"]
+        );
+        assert_eq!(rows[3][..2], ["UAP-02", "2.4G"]);
+        assert_eq!(rows.len(), 5);
+    }
+
+    #[test]
+    fn radios_device_filter_and_ids() {
+        let ids = stdout(&run(&["radios", "list", "--device", "uap-02", "-o", "ids"]));
+        assert_eq!(ids, "uap-02/2.4g\nuap-02/5g\n");
+        let o = run(&["radios", "list", "--device", "us-8", "-o", "ids"]);
+        assert!(o.status.success());
+        assert_eq!(stdout(&o), "");
+        let table = stdout(&run(&["radios", "list", "--device", "nope"]));
+        assert_eq!(table.lines().count(), 1, "header only");
+    }
+
+    #[test]
+    fn radios_json_and_wide() {
+        let v: serde_json::Value =
+            serde_json::from_str(&stdout(&run(&["radios", "list", "-o", "json"]))).unwrap();
+        let first = &v["items"][0];
+        assert_eq!(first["id"], "uap-02/2.4g");
+        assert_eq!(first["device"]["name"], "UAP-02");
+        assert_eq!(first["retries"], 31.4);
+        assert!(first["minRssi"].is_null());
+        let wide = stdout(&run(&["radios", "list", "--wide"]));
+        assert!(wide.lines().next().unwrap().ends_with("EXPERIENCE"));
+        assert_eq!(
+            wide.lines().count(),
+            stdout(&run(&["radios", "list"])).lines().count()
+        );
     }
 
     #[test]
@@ -345,7 +403,7 @@ mod with_fixtures {
             assert_eq!(o.status.code(), Some(1), "{args:?}");
             assert_eq!(
                 String::from_utf8_lossy(&o.stderr),
-                "Error: -o ids is only supported by devices, clients, vlans, ssids and wans list, and clients traffic\n",
+                "Error: -o ids is only supported by devices, clients, vlans, ssids, wans and radios list, and clients traffic\n",
                 "{args:?}"
             );
             assert!(o.stdout.is_empty(), "{args:?}");
@@ -995,7 +1053,7 @@ fn ids_with_config_check_fails_before_checking() {
     assert_eq!(out.status.code(), Some(1));
     assert_eq!(
         String::from_utf8_lossy(&out.stderr),
-        "Error: -o ids is only supported by devices, clients, vlans, ssids and wans list, and clients traffic\n"
+        "Error: -o ids is only supported by devices, clients, vlans, ssids, wans and radios list, and clients traffic\n"
     );
     assert!(out.stdout.is_empty(), "no check report");
 }

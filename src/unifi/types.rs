@@ -16,6 +16,57 @@ where
     Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
 }
 
+/// A number however the controller sends it: an integer, a float or a
+/// numeric string. Anything else (`"auto"`, `"VHT80"`, `null`) is `None`, so
+/// one odd radio field never fails the whole `stat/device` response.
+fn lenient_f64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<f64>, D::Error> {
+    Ok(match Option::<Value>::deserialize(d)? {
+        Some(Value::Number(n)) => n.as_f64(),
+        Some(Value::String(s)) => s.trim().parse().ok(),
+        _ => None,
+    }
+    .filter(|f: &f64| f.is_finite()))
+}
+
+/// `lenient_f64`, rounded to the nearest integer.
+fn lenient_i64<'de, D: Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
+    Ok(lenient_f64(d)?.map(|f| f.round() as i64))
+}
+
+/// `true` only for a JSON `true`.
+fn lenient_bool<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    Ok(matches!(
+        Option::<Value>::deserialize(d)?,
+        Some(Value::Bool(true))
+    ))
+}
+
+/// `lenient_string`, empty when absent.
+fn lenient_text<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Ok(lenient_string(d)?.unwrap_or_default())
+}
+
+/// The elements of an array that parse as `T`; anything that is not an array
+/// is empty, so one malformed radio never fails the whole device list.
+fn lenient_vec<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    Ok(match Option::<Value>::deserialize(d)? {
+        Some(Value::Array(items)) => items
+            .into_iter()
+            .filter_map(|v| T::deserialize(v).ok())
+            .collect(),
+        _ => Vec::new(),
+    })
+}
+
+/// A non-empty string or number as text; anything else is `None`.
+fn lenient_string<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    Ok(scalar(Option::<Value>::deserialize(d)?.as_ref()))
+}
+
 /// `{"meta": {...}, "data": [...]}` wrapper used by the /api/s/{site} endpoints.
 #[derive(Debug, Deserialize)]
 #[serde(bound(deserialize = "T: Deserialize<'de> + Default"))]
@@ -89,6 +140,10 @@ pub struct Device {
     pub port_table: Vec<PortEntry>,
     #[serde(deserialize_with = "nd")]
     pub vap_table: Vec<Vap>,
+    #[serde(deserialize_with = "lenient_vec")]
+    pub radio_table: Vec<RadioEntry>,
+    #[serde(deserialize_with = "lenient_vec")]
+    pub radio_table_stats: Vec<RadioStats>,
     pub uplink: Option<Uplink>,
     pub wan1: Option<WanIface>,
     pub wan2: Option<WanIface>,
@@ -106,6 +161,55 @@ pub struct Vap {
     pub id: String,
     #[serde(deserialize_with = "nd")]
     pub up: bool,
+}
+
+/// One row of an access point's `radio_table`: a radio's configuration.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct RadioEntry {
+    /// Interface name, `wifi0`, `wifi1`, …; the key into `radio_table_stats`.
+    #[serde(deserialize_with = "lenient_text")]
+    pub name: String,
+    /// Band code: `ng` (2.4 GHz), `na` (5 GHz), `6e` (6 GHz).
+    #[serde(deserialize_with = "lenient_text")]
+    pub radio: String,
+    #[serde(deserialize_with = "lenient_i64")]
+    pub channel: Option<i64>,
+    /// Channel width in MHz, sent as a string (`"20"`, `"80"`).
+    #[serde(deserialize_with = "lenient_i64")]
+    pub ht: Option<i64>,
+    #[serde(deserialize_with = "lenient_string")]
+    pub tx_power_mode: Option<String>,
+    #[serde(deserialize_with = "lenient_bool")]
+    pub min_rssi_enabled: bool,
+    #[serde(deserialize_with = "lenient_i64")]
+    pub min_rssi: Option<i64>,
+}
+
+/// One row of an access point's `radio_table_stats`: a radio's live figures.
+/// Channel utilisation (`cu_*`) is percent of airtime.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct RadioStats {
+    #[serde(deserialize_with = "lenient_text")]
+    pub name: String,
+    #[serde(deserialize_with = "lenient_i64")]
+    pub channel: Option<i64>,
+    #[serde(deserialize_with = "lenient_i64")]
+    pub cu_total: Option<i64>,
+    #[serde(deserialize_with = "lenient_i64")]
+    pub cu_self_rx: Option<i64>,
+    #[serde(deserialize_with = "lenient_i64")]
+    pub cu_self_tx: Option<i64>,
+    #[serde(deserialize_with = "lenient_f64")]
+    pub tx_retries_pct: Option<f64>,
+    #[serde(deserialize_with = "lenient_i64")]
+    pub num_sta: Option<i64>,
+    #[serde(deserialize_with = "lenient_i64")]
+    pub satisfaction: Option<i64>,
+    /// dBm.
+    #[serde(deserialize_with = "lenient_i64")]
+    pub tx_power: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -585,6 +689,74 @@ mod tests {
         assert!(d.port_table.is_empty());
         assert!(d.uplink.is_none());
         assert_eq!(d.state, 0);
+    }
+
+    #[test]
+    fn radio_fields_tolerate_odd_types() {
+        let d: Device = serde_json::from_str(
+            r#"{"name":"ap","radio_table":[
+                {"name":"wifi0","radio":"ng","channel":"auto","ht":"20","tx_power_mode":"auto",
+                 "min_rssi_enabled":true,"min_rssi":-75},
+                {"name":"wifi1","radio":"na","channel":36,"ht":"VHT80","tx_power_mode":null,
+                 "min_rssi_enabled":null}],
+              "radio_table_stats":[
+                {"name":"wifi0","channel":"6","cu_total":71.6,"cu_self_rx":"20","cu_self_tx":null,
+                 "tx_retries_pct":"14.2","num_sta":9,"satisfaction":-1,"tx_power":17}]}"#,
+        )
+        .unwrap();
+        let (a, b) = (&d.radio_table[0], &d.radio_table[1]);
+        assert_eq!((a.name.as_str(), a.radio.as_str()), ("wifi0", "ng"));
+        assert_eq!((a.channel, a.ht), (None, Some(20)));
+        assert_eq!(a.tx_power_mode.as_deref(), Some("auto"));
+        assert!(a.min_rssi_enabled);
+        assert_eq!(a.min_rssi, Some(-75));
+        assert_eq!(
+            (
+                b.channel,
+                b.ht,
+                b.tx_power_mode.as_deref(),
+                b.min_rssi_enabled
+            ),
+            (Some(36), None, None, false)
+        );
+        let s = &d.radio_table_stats[0];
+        assert_eq!(
+            (s.channel, s.cu_total, s.cu_self_rx, s.cu_self_tx),
+            (Some(6), Some(72), Some(20), None)
+        );
+        assert_eq!(s.tx_retries_pct, Some(14.2));
+        assert_eq!(
+            (s.num_sta, s.satisfaction, s.tx_power),
+            (Some(9), Some(-1), Some(17))
+        );
+    }
+
+    #[test]
+    fn malformed_radio_tables_do_not_fail_the_device() {
+        for json in [
+            r#"{"name":"ap","radio_table":{},"radio_table_stats":"none"}"#,
+            r#"{"name":"ap","radio_table":["x",null,{"name":0,"radio":"ng"}],
+                "radio_table_stats":[{"name":1,"cu_total":5}]}"#,
+        ] {
+            let d: Device = serde_json::from_str(json).unwrap_or_else(|e| panic!("{json}: {e}"));
+            assert_eq!(d.name, "ap");
+            for r in &d.radio_table {
+                assert_eq!(r.radio, "ng");
+                assert_eq!(r.name, "0");
+            }
+        }
+        let d: Device = serde_json::from_str(
+            r#"{"name":"ap","radio_table":["x",{"name":"wifi0","radio":"ng"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(d.radio_table.len(), 1, "non-object rows are skipped");
+    }
+
+    #[test]
+    fn device_without_radios_has_empty_tables() {
+        let d: Device = serde_json::from_str(r#"{"name":"sw","radio_table":null}"#).unwrap();
+        assert!(d.radio_table.is_empty());
+        assert!(d.radio_table_stats.is_empty());
     }
 
     #[test]

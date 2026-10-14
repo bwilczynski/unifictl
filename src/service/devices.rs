@@ -6,6 +6,7 @@ use serde_json::Value;
 
 use super::Service;
 use super::common::*;
+use super::radios::build_radios;
 use crate::error::{Error, Result};
 use crate::model::*;
 use crate::unifi::fetch;
@@ -150,6 +151,7 @@ fn build_ap_detail(d: &Device, idx: &PortIndex) -> AccessPointDetail {
         base: network_device(d, &idx.by_mac),
         num_clients: connected_clients.len() as i64,
         connected_clients,
+        radios: build_radios(d),
     }
 }
 
@@ -466,6 +468,19 @@ mod tests {
         assert_eq!(list.items[5].device_type, DeviceType::Switch);
         assert_eq!(list.items[3].id, "uap-01");
         assert_eq!(list.items[3].device_type, DeviceType::AccessPoint);
+    }
+
+    #[test]
+    fn ap_detail_carries_radios() {
+        let NetworkDeviceDetail::AccessPoint(ap) = svc(fixtures()).get_device("uap-02").unwrap()
+        else {
+            panic!("not an access point")
+        };
+        let ids: Vec<&str> = ap.radios.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, ["uap-02/2.4g", "uap-02/5g"]);
+        let v = serde_json::to_value(&ap).unwrap();
+        assert_eq!(v["radios"][1]["band"], "5G");
+        assert!(v["radios"][0].get("device").is_none());
     }
 
     #[test]

@@ -10,8 +10,8 @@ use serde::Serialize;
 use crate::cache::Cache;
 use crate::cli::{
     CategoryArg, Cli, ClientsCommand, ColorMode, Command, ConfigCommand, DevicesCommand, LogsArgs,
-    LookupCommand, ModeFilter, OutputFormat, PortsCommand, PriorityArg, StateFilter, StatusFilter,
-    TrafficArgs, WansCommand,
+    LookupCommand, ModeFilter, OutputFormat, PortsCommand, PriorityArg, RadiosCommand, StateFilter,
+    StatusFilter, TrafficArgs, WansCommand,
 };
 use crate::completion;
 use crate::config;
@@ -19,8 +19,8 @@ use crate::error::{Error, Result};
 use crate::model::{ClientStatus, Ids, LogEntry, LogSeverity, PortState, VlanMode};
 use crate::render;
 use crate::service::{
-    DEFAULT_OUTAGE_WINDOW_SECONDS, LogFilter, PortFilter, Service, TrafficView, TrafficWindow,
-    follow_loop,
+    DEFAULT_OUTAGE_WINDOW_SECONDS, LogFilter, PortFilter, RadioFilter, Service, TrafficView,
+    TrafficWindow, follow_loop,
 };
 use crate::setup;
 use crate::timespec;
@@ -478,6 +478,16 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
                 render::ports::list_table(l, args.wide, color)
             })
         }
+        Command::Radios {
+            command: RadiosCommand::List(args),
+        } => {
+            let filter = RadioFilter {
+                device_id: args.device.clone(),
+            };
+            emit_list(out, &svc.list_radios(&filter)?, |l| {
+                render::radios::list_table(l, args.wide, color)
+            })
+        }
         Command::Vlans { command } => match command {
             LookupCommand::List { wide } => emit_list(out, &svc.list_vlans()?, |l| {
                 render::vlans::list(l, *wide, color)
@@ -532,7 +542,7 @@ fn emit_list<T: Serialize + Ids>(
 }
 
 fn ids_unsupported() -> Error {
-    Error::Other("-o ids is only supported by devices, clients, vlans, ssids and wans list, and clients traffic".into())
+    Error::Other("-o ids is only supported by devices, clients, vlans, ssids, wans and radios list, and clients traffic".into())
 }
 
 /// Commands whose output is a list of items with IDs.
@@ -554,6 +564,8 @@ fn lists_ids(cmd: &Command) -> bool {
             command: LookupCommand::List { .. }
         } | Command::Wans {
             command: WansCommand::List { .. }
+        } | Command::Radios {
+            command: RadiosCommand::List(_)
         }
     )
 }

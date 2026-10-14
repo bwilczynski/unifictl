@@ -3,8 +3,11 @@
 use super::Table;
 use super::format::{format_bytes, format_bytes_per_sec, format_uptime};
 use super::ports::decorate_port;
+use super::radios;
 use super::style;
-use crate::model::{DevicePort, NetworkDevice, NetworkDeviceDetail, NetworkDeviceList, PortState};
+use crate::model::{
+    DevicePort, NetworkDevice, NetworkDeviceDetail, NetworkDeviceList, PortState, Radio,
+};
 
 /// Lean by default; `wide` adds identity and link columns after them.
 pub fn list(list: &NetworkDeviceList, wide: bool, color: bool) -> String {
@@ -62,6 +65,21 @@ pub fn get(detail: &NetworkDeviceDetail, all_ports: bool, color: bool) -> String
         }
         NetworkDeviceDetail::AccessPoint(ap) => {
             base(&mut t, &ap.base, color);
+            if !ap.radios.is_empty() {
+                section(&mut t, "--- RADIOS ---");
+                t.row(&radios::header(true));
+                let mut sorted: Vec<&Radio> = ap.radios.iter().collect();
+                sorted.sort_by(|a, b| {
+                    radios::band_rank(&a.band)
+                        .cmp(&radios::band_rank(&b.band))
+                        .then(a.band.cmp(&b.band))
+                        .then(a.name.cmp(&b.name))
+                });
+                for r in sorted {
+                    let row = radios::cells(r, true, color);
+                    t.row(&row.iter().map(String::as_str).collect::<Vec<_>>());
+                }
+            }
             section(&mut t, "--- CLIENTS ---");
             t.row(&["CLIENT", "SSID", "SIGNAL"]);
             for c in &ap.connected_clients {
@@ -341,6 +359,25 @@ cgf-01            CGF-01            192.168.1.10  gateway      connected  -
         assert!(out.contains("\n\n--- WANS ---\nID"));
         assert!(out.lines().any(|l| l.starts_with("internet-1")));
         assert!(!out.contains("UPLINK"));
+    }
+
+    #[test]
+    fn access_point_has_radios_section_before_clients() {
+        let out = get(&svc().get_device("uap-01").unwrap(), false, false);
+        let radios = out.find("--- RADIOS ---\nBAND").expect("radios section");
+        assert!(radios < out.find("--- CLIENTS ---").unwrap());
+        let row: Vec<&str> = out
+            .lines()
+            .find(|l| l.starts_with("2.4G"))
+            .unwrap()
+            .split_whitespace()
+            .collect();
+        assert_eq!(
+            row,
+            [
+                "2.4G", "11", "20", "-", "17", "dBm", "-", "16%", "1%", "26%", "4", "98%"
+            ]
+        );
     }
 
     #[test]

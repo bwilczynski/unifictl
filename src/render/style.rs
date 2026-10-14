@@ -94,6 +94,26 @@ pub fn latency(ms: Option<i64>, on: bool) -> String {
     ms.map_or_else(dash, |m| graded(&format!("{m} ms"), health::latency(m), on))
 }
 
+/// `71%` graded by `grade`; `-` when unreported.
+fn graded_pct(pct: Option<i64>, grade: fn(i64) -> Health, on: bool) -> String {
+    pct.map_or_else(dash, |p| graded(&format!("{p}%"), grade(p), on))
+}
+
+/// A radio's channel utilisation, graded.
+pub fn utilisation(pct: Option<i64>, on: bool) -> String {
+    graded_pct(pct, health::utilisation, on)
+}
+
+/// A radio's interference, graded.
+pub fn interference(pct: Option<i64>, on: bool) -> String {
+    graded_pct(pct, health::interference, on)
+}
+
+/// A radio's TX retry rate, rounded to a whole percent and graded on that.
+pub fn retries(pct: Option<f64>, on: bool) -> String {
+    graded_pct(pct.map(|p| p.round() as i64), health::retries, on)
+}
+
 /// A wired client's link speed, graded on absolute speed.
 pub fn wired_speed(speed: Option<LinkSpeed>, on: bool) -> String {
     speed.map_or_else(dash, |s| {
@@ -203,6 +223,23 @@ mod tests {
     fn paint_wraps_only_when_on() {
         assert_eq!(paint("up", Paint::Green, true), "\x1b[32mup\x1b[0m");
         assert_eq!(paint("up", Paint::Green, false), "up");
+    }
+
+    #[test]
+    fn radio_metrics_are_graded_percentages() {
+        assert_eq!(utilisation(Some(71), true), "\x1b[33m71%\x1b[0m");
+        assert_eq!(utilisation(Some(22), true), "\x1b[32m22%\x1b[0m");
+        assert_eq!(interference(Some(38), true), "\x1b[31m38%\x1b[0m");
+        assert_eq!(retries(Some(14.4), true), "\x1b[33m14%\x1b[0m");
+        assert_eq!(
+            retries(Some(9.5), true),
+            "\x1b[33m10%\x1b[0m",
+            "graded on the rounded value"
+        );
+        assert_eq!(utilisation(Some(71), false), "71%");
+        assert_eq!(utilisation(None, true), "-");
+        assert_eq!(interference(None, true), "-");
+        assert_eq!(retries(None, true), "-");
     }
 
     #[test]
