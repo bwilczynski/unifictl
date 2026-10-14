@@ -83,6 +83,7 @@ so a `list` followed by a few `get`s asks the controller once. Pass
 ## Use
 
 ```
+unifictl status
 unifictl devices list [--wide] | get <id> [--all-ports]
 unifictl clients list [--status online|offline] [--wide] | get <id> | traffic [<id> | --by-app] [-S WHEN] [-U WHEN]
 unifictl topology [--include-clients] [--include-wireless]
@@ -120,6 +121,33 @@ config. Then the whole network as a tree, with the wireless clients under the
 access point each one is on.
 
 ![unifictl devices list, then unifictl devices get switch-core --all-ports, then unifictl topology --include-wireless](docs/demo/devices.gif)
+
+### Status
+
+`unifictl status` answers "is anything wrong?" on one screen: a line per
+WAN, then devices, Wi-Fi, wired, alarms and firmware updates, each with a
+verdict, and the culprits named below the line:
+
+```sh
+$ unifictl status
+WAN      ok     Internet 1  up 3d 4h 0m 0s  99.98% over 3d 4h  11 ms
+WAN      idle   Internet 2  not connected since boot
+DEVICES  error  8 of 9 online
+                offline: ap-garage
+WI-FI    warn   4 APs, 38 clients
+                poor experience: printer-0b02 (38), roborock-0c04 (41)
+WIRED    ok     3 switches, 41 clients
+ALARMS   ok     no high-severity events in 24h
+UPDATES  info   ap-office 7.1.66 → 7.1.68
+```
+
+Verdicts combine unifictl's own checks (the same thresholds as the list
+colours) with the controller's health report. A WAN that has been down since
+the gateway started, such as an unplugged backup, is `idle` rather than an
+error. Alarms are the high-severity system log entries of the last 24 hours
+(`unifictl logs -p high -S -24h` lists them all). The command exits 1 when a
+row is `error`. A row whose data cannot be read says so and shows `unknown`
+without failing the command.
 
 ### Traffic
 

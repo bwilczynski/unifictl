@@ -497,6 +497,73 @@ mod with_fixtures {
         }
     }
 
+    fn status_in(dir: &std::path::Path, args: &[&str]) -> Output {
+        Command::new(env!("CARGO_BIN_EXE_unifictl"))
+            .arg("--fixtures")
+            .arg(dir)
+            .args(args)
+            .arg("status")
+            .env("TZ", "UTC")
+            .env("UNIFICTL_NOW", "2026-10-11T12:00:00Z")
+            .output()
+            .unwrap()
+    }
+
+    #[test]
+    fn status_shows_every_area_and_exits_0() {
+        let o = status_in(&fixtures(), &[]);
+        assert_eq!(
+            o.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&o.stderr)
+        );
+        let labels: Vec<String> = stdout(&o)
+            .lines()
+            .filter(|l| !l.starts_with(' '))
+            .map(|l| l.split_whitespace().next().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            labels,
+            [
+                "WAN", "WAN", "DEVICES", "WI-FI", "WIRED", "ALARMS", "UPDATES"
+            ]
+        );
+    }
+
+    #[test]
+    fn status_json_and_ids() {
+        let o = status_in(&fixtures(), &["-o", "json"]);
+        assert!(o.status.success());
+        let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+        assert_eq!(v["rows"].as_array().unwrap().len(), 7);
+        assert_eq!(v["rows"][2]["area"], "devices");
+        assert!(!stdout(&o).contains('\x1b'));
+        let o = status_in(&fixtures(), &["-o", "ids"]);
+        assert_eq!(o.status.code(), Some(1));
+    }
+
+    #[test]
+    fn status_exits_1_when_a_device_is_offline() {
+        let dir = tempfile::tempdir().unwrap();
+        for entry in std::fs::read_dir(fixtures()).unwrap() {
+            let path = entry.unwrap().path();
+            std::fs::copy(&path, dir.path().join(path.file_name().unwrap())).unwrap();
+        }
+        let devices = dir.path().join("unifi-devices.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&devices).unwrap()).unwrap();
+        v["data"][0]["state"] = 0.into();
+        std::fs::write(&devices, v.to_string()).unwrap();
+        let o = status_in(dir.path(), &[]);
+        assert_eq!(o.status.code(), Some(1));
+        assert!(stdout(&o).contains("offline: us-8"), "{}", stdout(&o));
+        assert!(
+            o.stderr.is_empty(),
+            "an unhealthy network is not an error message"
+        );
+    }
+
     #[test]
     fn empty_controller_lists_and_topology() {
         let dir = tempfile::tempdir().unwrap();
