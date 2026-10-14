@@ -96,12 +96,14 @@ and `clients traffic`, also take `-o ids`, printing one ID per line for scripts 
 IDs are kebab-case names (`us-8-60w`); clients add the last two MAC bytes (`nas-1-0002`).
 
 `devices list` and `clients list` show an EXPERIENCE column (UniFi's score)
-for spotting trouble quickly; `--wide` on any list adds more columns, such as
-MAC, uplink, signal, link speed and live traffic.
+for spotting trouble quickly; `wans list` shows each WAN's own uptime and its
+availability over the last 24 hours. `--wide` on any list adds more columns,
+such as MAC, uplink, signal, link speed, live traffic and WAN latency.
 
 On a terminal, status cells are coloured (green healthy, red disconnected, dim
 offline/down, yellow disabled), health metrics are green, yellow or red
-(experience, Wi-Fi signal, and link speed against what the link allows),
+(experience, Wi-Fi signal, link speed against what the link allows, and WAN
+availability and latency),
 download is cyan and upload magenta, and names are blue, in your terminal's own
 palette. `--color always|never` overrides that; `NO_COLOR` turns it off.
 

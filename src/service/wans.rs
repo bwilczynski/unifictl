@@ -39,13 +39,24 @@ impl Service {
 
 fn build_wan(n: &NetworkConf, gw: Option<&Device>) -> Wan {
     let iface = resolve_iface(gw, &n.wan_networkgroup);
-    let (ip_address, status, uptime) = live_fields(iface, gw);
+    let stats = gw.and_then(|g| g.uptime_stats.get(&n.wan_networkgroup));
+    let status = if iface.is_some_and(|i| i.up) {
+        WanStatus::Connected
+    } else {
+        WanStatus::Disconnected
+    };
     Wan {
         id: to_kebab(&n.name),
         name: n.name.clone(),
-        ip_address,
+        ip_address: iface.map(|i| i.ip.clone()).unwrap_or_default(),
         status,
-        uptime,
+        uptime: stats.and_then(|s| s.uptime),
+        downtime: stats.and_then(|s| s.downtime),
+        availability: stats.and_then(|s| s.availability),
+        availability_period: stats.and_then(|s| s.time_period),
+        latency: stats
+            .and_then(|s| s.latency_average)
+            .map(|ms| ms.round() as i64),
         dns_servers: dns_servers(iface, n),
     }
 }
@@ -62,16 +73,6 @@ fn resolve_iface<'a>(gw: Option<&'a Device>, group: &str) -> Option<&'a WanIface
         "WAN2" => gw.wan2.as_ref(),
         _ => None,
     }
-}
-
-fn live_fields(iface: Option<&WanIface>, gw: Option<&Device>) -> (String, WanStatus, i64) {
-    let ip = iface.map(|i| i.ip.clone()).unwrap_or_default();
-    let status = if iface.is_some_and(|i| i.up) {
-        WanStatus::Connected
-    } else {
-        WanStatus::Disconnected
-    };
-    (ip, status, gw.map_or(0, |g| g.uptime))
 }
 
 /// Configured DNS wins; otherwise what the interface reports.
@@ -101,7 +102,35 @@ mod tests {
         assert_eq!(w.name, "Internet 1");
         assert_eq!(w.ip_address, "203.0.113.1");
         assert_eq!(w.status, WanStatus::Connected);
-        assert!(w.uptime > 0);
+    }
+
+    #[test]
+    fn uptime_is_the_wans_own_not_the_gateways() {
+        let items = svc(fixtures()).list_wans().unwrap().items;
+        let (up, down) = (&items[0], &items[1]);
+        assert_eq!(up.uptime, Some(4253), "gateway uptime is 5627");
+        assert_eq!(up.downtime, None);
+        assert_eq!(up.availability, Some(100.0));
+        assert_eq!(up.availability_period, Some(4270));
+        assert_eq!(up.latency, Some(13));
+        assert_eq!(down.status, WanStatus::Disconnected);
+        assert_eq!(down.uptime, None);
+        assert_eq!(down.downtime, Some(5577));
+        assert_eq!(down.availability, None);
+        assert_eq!(down.latency, None);
+    }
+
+    #[test]
+    fn gateway_without_uptime_stats_reports_nothing() {
+        let mut api = fixtures();
+        for d in &mut api.devices {
+            d.uptime_stats.clear();
+        }
+        let w = &svc(api).list_wans().unwrap().items[0];
+        assert_eq!(w.status, WanStatus::Connected);
+        assert_eq!(w.uptime, None, "never the gateway's uptime");
+        assert_eq!(w.availability, None);
+        assert_eq!(w.latency, None);
     }
 
     #[test]
@@ -132,7 +161,7 @@ mod tests {
         let w = &svc(api).list_wans().unwrap().items[0];
         assert_eq!(w.status, WanStatus::Disconnected);
         assert_eq!(w.ip_address, "");
-        assert_eq!(w.uptime, 0);
+        assert_eq!(w.uptime, None);
     }
 
     #[test]

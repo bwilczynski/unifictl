@@ -498,7 +498,16 @@ pub struct Wan {
     pub name: String,
     pub ip_address: String,
     pub status: WanStatus,
-    pub uptime: i64,
+    /// Seconds since this WAN came up; `None` while down or unreported.
+    pub uptime: Option<i64>,
+    /// Seconds since this WAN went down; `None` while up or unreported.
+    pub downtime: Option<i64>,
+    /// Percent over `availability_period`.
+    pub availability: Option<f64>,
+    /// Seconds.
+    pub availability_period: Option<i64>,
+    /// Average latency in milliseconds over `availability_period`.
+    pub latency: Option<i64>,
     pub dns_servers: Vec<String>,
 }
 

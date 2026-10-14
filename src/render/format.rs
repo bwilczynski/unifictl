@@ -18,6 +18,28 @@ pub fn format_uptime(seconds: i64) -> String {
     parts.join(" ")
 }
 
+/// A time window: `24h`, `7d`, `1h 11m 10s`. Zero parts are left out, and
+/// days are used only from two days up, so one day reads `24h`.
+pub fn format_period(seconds: i64) -> String {
+    let (d, rem) = if seconds >= 2 * 86400 {
+        (seconds / 86400, seconds % 86400)
+    } else {
+        (0, seconds)
+    };
+    let (h, rem) = (rem / 3600, rem % 3600);
+    let (m, s) = (rem / 60, rem % 60);
+    let parts: Vec<String> = [(d, "d"), (h, "h"), (m, "m"), (s, "s")]
+        .into_iter()
+        .filter(|(val, _)| *val > 0)
+        .map(|(val, unit)| format!("{val}{unit}"))
+        .collect();
+    if parts.is_empty() {
+        "0s".to_string()
+    } else {
+        parts.join(" ")
+    }
+}
+
 fn binary_units(n: i64, suffix: &str) -> String {
     const UNIT: i64 = 1024;
     if n < UNIT {
@@ -86,6 +108,15 @@ mod tests {
         assert_eq!(format_uptime(45), "45s");
         assert_eq!(format_uptime(0), "0s");
         assert_eq!(format_uptime(3_651_480), "42d 6h 18m 0s");
+    }
+
+    #[test]
+    fn period() {
+        assert_eq!(format_period(86400), "24h");
+        assert_eq!(format_period(7 * 86400), "7d");
+        assert_eq!(format_period(4270), "1h 11m 10s");
+        assert_eq!(format_period(2 * 86400 + 3600), "2d 1h");
+        assert_eq!(format_period(0), "0s");
     }
 
     #[test]

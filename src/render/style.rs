@@ -80,6 +80,20 @@ pub fn signal(dbm: Option<i64>, on: bool) -> String {
     dbm.map_or_else(dash, |d| graded(&format!("{d} dBm"), health::signal(d), on))
 }
 
+/// WAN availability, `99.93%`, graded on the displayed value; `-` when
+/// unreported.
+pub fn availability(pct: Option<f64>, on: bool) -> String {
+    pct.map_or_else(dash, |p| {
+        let shown = (p * 100.0).round() / 100.0;
+        graded(&format!("{shown:.2}%"), health::availability(shown), on)
+    })
+}
+
+/// WAN latency, `11 ms`, graded; `-` when unreported.
+pub fn latency(ms: Option<i64>, on: bool) -> String {
+    ms.map_or_else(dash, |m| graded(&format!("{m} ms"), health::latency(m), on))
+}
+
 /// A wired client's link speed, graded on absolute speed.
 pub fn wired_speed(speed: Option<LinkSpeed>, on: bool) -> String {
     speed.map_or_else(dash, |s| {
