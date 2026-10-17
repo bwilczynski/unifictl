@@ -160,9 +160,14 @@ fn text(row: &StatusRow, tz: &TimeZone, color: bool) -> (String, Vec<String>) {
             _ => ("no high-severity events in 24h".to_string(), Vec::new()),
         },
         StatusArea::Updates { updates } => {
-            let mut lines = updates
-                .iter()
-                .map(|u| format!("{} {} → {}", style::name(&u.device.id, color), u.from, u.to));
+            let mut lines = updates.iter().map(|u| {
+                format!(
+                    "{} {} → {}",
+                    style::name(&u.device.id, color),
+                    style::printable(&u.from),
+                    style::printable(&u.to)
+                )
+            });
             match lines.next() {
                 Some(first) => (first, lines.collect()),
                 None => ("all up to date".to_string(), Vec::new()),

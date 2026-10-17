@@ -3,7 +3,7 @@
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
-use super::style::{Paint, paint};
+use super::style::{Paint, paint, printable};
 use crate::error::{Error, Result};
 use crate::model::{LogEntry, LogSeverity};
 
@@ -25,15 +25,6 @@ pub fn line(e: &LogEntry, tz: &TimeZone, color: bool) -> String {
         None => message,
     };
     format!("{time} {category}: {message}\n")
-}
-
-/// `s` with control characters (C0, DEL, C1) replaced by U+FFFD. Messages
-/// carry names the network controls, such as DHCP hostnames; an escape
-/// sequence in one must not reach the terminal. JSON escapes them itself.
-fn printable(s: &str) -> String {
-    s.chars()
-        .map(|c| if c.is_control() { '\u{fffd}' } else { c })
-        .collect()
 }
 
 /// One compact JSON object and a newline.

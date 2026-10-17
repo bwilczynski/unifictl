@@ -66,8 +66,12 @@ pub fn tree(topo: &NetworkTopology, include_wireless: bool, color: bool) -> Resu
             }
             TopologyEdge::Wireless(e) if include_wireless => {
                 let label = match e.signal_strength {
-                    Some(_) => format!("[{}, {}]", e.ssid, style::signal(e.signal_strength, color)),
-                    None => format!("[{}]", e.ssid),
+                    Some(_) => format!(
+                        "[{}, {}]",
+                        style::printable(&e.ssid),
+                        style::signal(e.signal_strength, color)
+                    ),
+                    None => format!("[{}]", style::printable(&e.ssid)),
                 };
                 children.entry(&e.target.id).or_default().push(Child {
                     id: &e.source.id,

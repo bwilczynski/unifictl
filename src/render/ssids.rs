@@ -14,7 +14,7 @@ pub fn list(list: &SsidList, wide: bool, color: bool) -> String {
     t.row(&header);
     for s in &list.items {
         let mut row = vec![
-            s.id.clone(),
+            style::printable(&s.id),
             style::name(&s.name, color),
             s.vlan_id.to_string(),
             format_bands(&s.bands),
@@ -31,7 +31,7 @@ pub fn list(list: &SsidList, wide: bool, color: bool) -> String {
 pub fn get(s: &SsidDetail, color: bool) -> String {
     let mut t = Table::new();
     t.row(&["FIELD", "VALUE"]);
-    t.row(&["ID", &s.base.id]);
+    t.row(&["ID", &style::printable(&s.base.id)]);
     t.row(&["NAME", &style::name(&s.base.name, color)]);
     t.row(&["VLAN ID", &s.base.vlan_id.to_string()]);
     t.row(&["BANDS", &format_bands(&s.base.bands)]);

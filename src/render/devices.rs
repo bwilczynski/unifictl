@@ -19,18 +19,18 @@ pub fn list(list: &NetworkDeviceList, wide: bool, color: bool) -> String {
     t.row(&header);
     for d in &list.items {
         let mut row = vec![
-            d.id.clone(),
+            style::printable(&d.id),
             style::name(&d.name, color),
-            d.ip.clone(),
+            style::printable(&d.ip),
             d.device_type.as_str().to_string(),
             style::device_status(d.status, color),
             style::experience(d.experience, color),
         ];
         if wide {
             row.extend([
-                d.mac.clone(),
-                d.model.clone(),
-                d.firmware_version.clone(),
+                style::printable(&d.mac),
+                style::printable(&d.model),
+                style::printable(&d.firmware_version),
                 format_uptime(d.uptime),
                 d.uplink.as_ref().map_or_else(
                     || "-".to_string(),
@@ -60,7 +60,7 @@ pub fn get(detail: &NetworkDeviceDetail, all_ports: bool, color: bool) -> String
             section(&mut t, "--- WANS ---");
             t.row(&["ID", "NAME"]);
             for w in &gw.wans {
-                t.row(&[&w.id, &style::name(&w.name, color)]);
+                t.row(&[&style::printable(&w.id), &style::name(&w.name, color)]);
             }
         }
         NetworkDeviceDetail::AccessPoint(ap) => {
@@ -84,8 +84,8 @@ pub fn get(detail: &NetworkDeviceDetail, all_ports: bool, color: bool) -> String
             t.row(&["CLIENT", "SSID", "SIGNAL"]);
             for c in &ap.connected_clients {
                 t.row(&[
-                    &c.client.name,
-                    &c.ssid,
+                    &style::printable(&c.client.name),
+                    &style::printable(&c.ssid),
                     &style::signal(Some(c.signal_strength), color),
                 ]);
             }
@@ -104,17 +104,17 @@ fn section(t: &mut Table, title: &str) {
 
 fn base(t: &mut Table, b: &NetworkDevice, color: bool) {
     t.row(&["FIELD", "VALUE"]);
-    t.row(&["ID", &b.id]);
+    t.row(&["ID", &style::printable(&b.id)]);
     t.row(&["NAME", &style::name(&b.name, color)]);
-    t.row(&["MAC", &b.mac]);
-    t.row(&["IP", &b.ip]);
+    t.row(&["MAC", &style::printable(&b.mac)]);
+    t.row(&["IP", &style::printable(&b.ip)]);
     t.row(&["TYPE", b.device_type.as_str()]);
     t.row(&["STATUS", &style::device_status(b.status, color)]);
     if let Some(e) = b.experience {
         t.row(&["EXPERIENCE", &style::experience(Some(e), color)]);
     }
-    t.row(&["MODEL", &b.model]);
-    t.row(&["FIRMWARE", &b.firmware_version]);
+    t.row(&["MODEL", &style::printable(&b.model)]);
+    t.row(&["FIRMWARE", &style::printable(&b.firmware_version)]);
     t.row(&["UPTIME", &format_uptime(b.uptime)]);
     let traffic = |rate: i64, total: i64| {
         format!(
@@ -138,7 +138,7 @@ fn base(t: &mut Table, b: &NetworkDevice, color: bool) {
         ),
     ]);
     if let Some(ul) = &b.uplink {
-        let mut s = ul.device.name.clone();
+        let mut s = style::printable(&ul.device.name);
         if let Some(port) = ul.port {
             s.push_str(&format!(" (port {port}"));
             if ul.link_speed.is_some() {

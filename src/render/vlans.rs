@@ -13,17 +13,17 @@ pub fn list(list: &VlanList, wide: bool, color: bool) -> String {
     t.row(&header);
     for v in &list.items {
         let mut row = vec![
-            v.id.clone(),
+            style::printable(&v.id),
             style::name(&v.name, color),
             v.vlan_id.to_string(),
-            v.subnet.clone(),
+            style::printable(&v.subnet),
         ];
         if wide {
             row.extend([
                 if v.gateway_ip.is_empty() {
                     "-".to_string()
                 } else {
-                    v.gateway_ip.clone()
+                    style::printable(&v.gateway_ip)
                 },
                 v.dhcp_mode.as_str().to_string(),
                 dhcp_range(v).unwrap_or_else(|| "-".to_string()),
@@ -37,7 +37,11 @@ pub fn list(list: &VlanList, wide: bool, color: bool) -> String {
 /// "start - end", only in DHCP server mode.
 fn dhcp_range(v: &Vlan) -> Option<String> {
     match (v.dhcp_mode, &v.dhcp_range) {
-        (DhcpMode::Server, Some(r)) => Some(format!("{} - {}", r.start, r.end)),
+        (DhcpMode::Server, Some(r)) => Some(format!(
+            "{} - {}",
+            style::printable(&r.start),
+            style::printable(&r.end)
+        )),
         _ => None,
     }
 }
@@ -45,20 +49,20 @@ fn dhcp_range(v: &Vlan) -> Option<String> {
 pub fn get(v: &Vlan, color: bool) -> String {
     let mut t = Table::new();
     t.row(&["FIELD", "VALUE"]);
-    t.row(&["ID", &v.id]);
+    t.row(&["ID", &style::printable(&v.id)]);
     t.row(&["NAME", &style::name(&v.name, color)]);
     t.row(&["VLAN ID", &v.vlan_id.to_string()]);
-    t.row(&["SUBNET", &v.subnet]);
-    t.row(&["GATEWAY IP", &v.gateway_ip]);
-    t.row(&["BROADCAST", &v.broadcast_ip]);
+    t.row(&["SUBNET", &style::printable(&v.subnet)]);
+    t.row(&["GATEWAY IP", &style::printable(&v.gateway_ip)]);
+    t.row(&["BROADCAST", &style::printable(&v.broadcast_ip)]);
     t.row(&["DHCP MODE", v.dhcp_mode.as_str()]);
     if let Some(r) = dhcp_range(v) {
         t.row(&["DHCP RANGE", &r]);
     }
     if let (DhcpMode::Relay, Some(relay)) = (v.dhcp_mode, &v.relay_server) {
-        t.row(&["RELAY", relay]);
+        t.row(&["RELAY", &style::printable(relay)]);
     }
-    t.row(&["DNS", &v.dns_servers.join(", ")]);
+    t.row(&["DNS", &style::printable(&v.dns_servers.join(", "))]);
     t.finish()
 }
 
