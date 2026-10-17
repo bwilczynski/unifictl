@@ -391,7 +391,7 @@ fn device_traffic(d: &Device) -> Traffic {
     }
 }
 
-fn device_uplink(d: &Device, by_mac: &HashMap<String, &Device>) -> Option<Connection> {
+pub(super) fn device_uplink(d: &Device, by_mac: &HashMap<String, &Device>) -> Option<Connection> {
     let up = d.uplink.as_ref().filter(|u| !u.uplink_mac.is_empty())?;
     let upstream = by_mac.get(&normalize_mac(&up.uplink_mac))?;
     let remote_max = up

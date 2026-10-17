@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use super::Service;
 use super::common::*;
+use super::devices::device_uplink;
 use crate::error::Result;
 use crate::model::*;
 use crate::unifi::fetch;
@@ -41,20 +42,15 @@ fn build(devices: &[Device], stas: &[Sta], offline: &[ClientV2]) -> NetworkTopol
             status: map_device_status(d.state),
             num_clients: (d.kind == "uap").then_some(d.user_num_sta + d.guest_num_sta),
         }));
-        let Some(up) = d.uplink.as_ref().filter(|u| !u.uplink_mac.is_empty()) else {
-            continue;
-        };
-        if let Some(upstream) = by_mac.get(&normalize_mac(&up.uplink_mac)) {
+        if let Some(up) = device_uplink(d, &by_mac) {
             edges.push(TopologyEdge::Wired(TopologyWiredEdge {
                 kind: "wired",
                 source: ConnectionRef::Device(device_ref(d)),
-                target: device_ref(upstream),
-                port: up.uplink_remote_port,
-                link_speed: if up.speed > 0 {
-                    map_link_speed(up.speed)
-                } else {
-                    None
-                },
+                target: up.device,
+                port: up.port,
+                link_speed: up.link_speed,
+                max_link_speed: up.max_link_speed,
+                full_duplex: up.full_duplex,
             }));
         }
     }
@@ -105,6 +101,8 @@ fn online_client_edge(sta: &Sta, by_mac: &HashMap<String, &Device>) -> Option<To
             } else {
                 None
             },
+            max_link_speed: None,
+            full_duplex: None,
         }));
     }
     let ssid = sta.essid.clone()?;
@@ -134,6 +132,8 @@ fn offline_client_edge(c: &ClientV2, by_mac: &HashMap<String, &Device>) -> Optio
             target,
             port: None,
             link_speed: None,
+            max_link_speed: None,
+            full_duplex: None,
         }));
     }
     Some(TopologyEdge::Wireless(TopologyWirelessEdge {
