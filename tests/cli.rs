@@ -78,7 +78,7 @@ mod with_fixtures {
             &["clients", "traffic"],
             &["clients", "traffic", "macbook-pro-0001"],
             &["clients", "traffic", "--by-app"],
-            &["ports", "list", "--all-ports"],
+            &["ports", "list", "--all"],
             &["wans", "list"],
             &["wans", "get", "internet-2"],
             &["wans", "get", "internet-1"],
@@ -264,10 +264,10 @@ mod with_fixtures {
         let wans = stdout(&run(&["--color", "always", "wans", "list"]));
         assert!(wans.contains("\x1b[32mconnected\x1b[0m"));
         assert!(wans.contains("\x1b[31mdisconnected\x1b[0m"));
-        let clients = stdout(&run(&["--color", "always", "clients", "list"]));
+        let clients = stdout(&run(&["--color", "always", "clients", "list", "--all"]));
         assert!(clients.contains("\x1b[32monline\x1b[0m"));
         assert!(clients.contains("\x1b[2moffline\x1b[0m"));
-        let ports = stdout(&run(&["--color", "always", "ports", "list", "--all-ports"]));
+        let ports = stdout(&run(&["--color", "always", "ports", "list", "--all"]));
         assert!(ports.contains("\x1b[32mup\x1b[0m"));
         assert!(ports.contains("\x1b[2mdown\x1b[0m"));
         let topo = stdout(&run(&[
@@ -470,7 +470,7 @@ mod with_fixtures {
     }
 
     #[test]
-    fn ports_default_to_up_unless_all_ports() {
+    fn ports_default_to_up_unless_all() {
         let count = |args: &[&str]| -> usize {
             let mut a = vec!["-o", "json", "ports", "list", "--device", "us-8-60w"];
             a.extend_from_slice(args);
@@ -478,8 +478,72 @@ mod with_fixtures {
             v["items"].as_array().unwrap().len()
         };
         assert_eq!(count(&[]), 7);
-        assert_eq!(count(&["--all-ports"]), 12);
+        assert_eq!(count(&["--all"]), 12);
         assert_eq!(count(&["--state", "down"]), 5);
+    }
+
+    #[test]
+    fn clients_default_to_online_unless_all() {
+        let ids = |args: &[&str]| -> String {
+            let mut a = vec!["-o", "ids", "clients", "list"];
+            a.extend_from_slice(args);
+            stdout(&run(&a))
+        };
+        assert_eq!(
+            ids(&[]),
+            "macbook-pro-0001\nnas-1-0002\nsonos-one-sl-l-bb03\n"
+        );
+        assert_eq!(ids(&["--all"]).lines().count(), 5);
+        assert_eq!(
+            ids(&["--status", "offline"]),
+            "kindle-paperwhite-bb04\nhost-02-bb05\n"
+        );
+    }
+
+    #[test]
+    fn clients_filters() {
+        let ids = |args: &[&str]| -> String {
+            let mut a = vec!["-o", "ids", "clients", "list"];
+            a.extend_from_slice(args);
+            stdout(&run(&a))
+        };
+        assert_eq!(ids(&["--connection", "wired"]), "nas-1-0002\n");
+        assert_eq!(
+            ids(&["--connection", "wired", "--all"]),
+            "nas-1-0002\nhost-02-bb05\n"
+        );
+        assert_eq!(
+            ids(&["--connection", "wireless"]),
+            "macbook-pro-0001\nsonos-one-sl-l-bb03\n"
+        );
+        assert_eq!(
+            ids(&["--device", "uap-01", "--all"]),
+            "macbook-pro-0001\nsonos-one-sl-l-bb03\nkindle-paperwhite-bb04\n"
+        );
+        assert_eq!(ids(&["--device", "us-8-60w"]), "nas-1-0002\n");
+        assert_eq!(ids(&["--ssid", "homelab-iot"]), "sonos-one-sl-l-bb03\n");
+        assert_eq!(ids(&["--ssid", "homelab", "--connection", "wired"]), "");
+        let table = stdout(&run(&["clients", "list", "--device", "nope"]));
+        assert_eq!(table.lines().count(), 1, "header only");
+    }
+
+    #[test]
+    fn devices_filters() {
+        let ids = |args: &[&str]| -> String {
+            let mut a = vec!["-o", "ids", "devices", "list"];
+            a.extend_from_slice(args);
+            stdout(&run(&a))
+        };
+        assert_eq!(ids(&["--type", "access-point"]), "uap-02\nuap-01\n");
+        assert_eq!(ids(&["--type", "ap"]), "uap-02\nuap-01\n");
+        assert_eq!(ids(&["--type", "gateway"]), "cgf-01\n");
+        assert_eq!(ids(&["--type", "switch"]).lines().count(), 4);
+        assert_eq!(ids(&["--status", "connected"]).lines().count(), 7);
+        assert_eq!(ids(&["--status", "disconnected"]), "");
+        assert_eq!(
+            run(&["devices", "list", "--type", "router"]).status.code(),
+            Some(2)
+        );
     }
 
     #[test]
@@ -509,8 +573,12 @@ mod with_fixtures {
     }
 
     #[test]
-    fn all_ports_conflicts_with_state() {
-        let o = run(&["ports", "list", "--all-ports", "--state", "up"]);
+    fn all_conflicts_with_state_and_status() {
+        let o = run(&["ports", "list", "--all", "--state", "up"]);
+        assert_eq!(o.status.code(), Some(2));
+        let o = run(&["ports", "list", "--all-ports"]);
+        assert_eq!(o.status.code(), Some(2), "renamed to --all");
+        let o = run(&["clients", "list", "--all", "--status", "online"]);
         assert_eq!(o.status.code(), Some(2));
     }
 
@@ -535,6 +603,7 @@ mod with_fixtures {
     fn every_command_runs() {
         for args in [
             &["clients", "list"][..],
+            &["clients", "list", "--all"],
             &["clients", "list", "--status", "offline"],
             &["clients", "get", "nas-1-0002"],
             &["vlans", "list"],

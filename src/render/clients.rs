@@ -147,7 +147,7 @@ pub fn get(c: &NetworkClient, color: bool, tz: &TimeZone) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::service::Service;
+    use crate::service::{ClientFilter, Service};
     use crate::unifi::fixtures::FixtureApi;
 
     fn svc() -> Service {
@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn default_list_is_lean_with_experience() {
         let out = list(
-            &svc().list_clients(None).unwrap(),
+            &svc().list_clients(&ClientFilter::default()).unwrap(),
             false,
             false,
             &TimeZone::UTC,
@@ -188,7 +188,7 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
     #[test]
     fn wide_list_adds_columns_after_default() {
         let out = list(
-            &svc().list_clients(None).unwrap(),
+            &svc().list_clients(&ClientFilter::default()).unwrap(),
             true,
             false,
             &TimeZone::UTC,
@@ -249,7 +249,7 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
     #[test]
     fn wide_list_grades_signal_and_link() {
         let out = list(
-            &svc().list_clients(None).unwrap(),
+            &svc().list_clients(&ClientFilter::default()).unwrap(),
             true,
             true,
             &TimeZone::UTC,
@@ -269,7 +269,7 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
 
     #[test]
     fn wide_unknown_upstream_is_dash() {
-        let mut l = svc().list_clients(None).unwrap();
+        let mut l = svc().list_clients(&ClientFilter::default()).unwrap();
         for c in &mut l.items {
             match &mut c.connected_to {
                 ClientConnection::Wired(w) => w.device = Default::default(),
@@ -355,7 +355,7 @@ host-02-bb05            host-02            192.168.10.42  offline  wired       -
     #[test]
     fn wide_offline_wireless_ssid_is_dash() {
         let out = list(
-            &svc().list_clients(None).unwrap(),
+            &svc().list_clients(&ClientFilter::default()).unwrap(),
             true,
             false,
             &TimeZone::UTC,

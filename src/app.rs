@@ -9,18 +9,22 @@ use serde::Serialize;
 
 use crate::cache::Cache;
 use crate::cli::{
-    CategoryArg, Cli, ClientsCommand, ColorMode, Command, ConfigCommand, DevicesCommand, LogsArgs,
-    LookupCommand, ModeFilter, OutputFormat, PortsCommand, PriorityArg, RadiosCommand, StateFilter,
-    StatusFilter, TrafficArgs, WansCommand,
+    CategoryArg, Cli, ClientsCommand, ColorMode, Command, ConfigCommand, ConnectionFilter,
+    DeviceStatusFilter, DeviceTypeFilter, DevicesCommand, LogsArgs, LookupCommand, ModeFilter,
+    OutputFormat, PortsCommand, PriorityArg, RadiosCommand, StateFilter, StatusFilter, TrafficArgs,
+    WansCommand,
 };
 use crate::completion;
 use crate::config;
 use crate::error::{Error, Result};
-use crate::model::{ClientStatus, Ids, LogEntry, LogSeverity, PortState, VlanMode};
+use crate::model::{
+    ClientStatus, ConnectionType, DeviceStatus, DeviceType, Ids, LogEntry, LogSeverity, PortState,
+    VlanMode,
+};
 use crate::render;
 use crate::service::{
-    DEFAULT_OUTAGE_WINDOW_SECONDS, LogFilter, PortFilter, RadioFilter, Service, TrafficView,
-    TrafficWindow, follow_loop,
+    ClientFilter, DEFAULT_OUTAGE_WINDOW_SECONDS, DeviceFilter, LogFilter, PortFilter, RadioFilter,
+    Service, TrafficView, TrafficWindow, follow_loop,
 };
 use crate::setup;
 use crate::timespec;
@@ -420,21 +424,51 @@ pub(crate) fn controller_service(
 pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> Result<String> {
     match cmd {
         Command::Devices { command } => match command {
-            DevicesCommand::List { wide } => emit_list(out, &svc.list_devices()?, |l| {
-                render::devices::list(l, *wide, color)
-            }),
+            DevicesCommand::List {
+                device_type,
+                status,
+                wide,
+            } => {
+                let filter = DeviceFilter {
+                    device_type: device_type.map(|t| match t {
+                        DeviceTypeFilter::Gateway => DeviceType::Gateway,
+                        DeviceTypeFilter::Switch => DeviceType::Switch,
+                        DeviceTypeFilter::AccessPoint => DeviceType::AccessPoint,
+                    }),
+                    status: status.map(|s| match s {
+                        DeviceStatusFilter::Connected => DeviceStatus::Connected,
+                        DeviceStatusFilter::Disconnected => DeviceStatus::Disconnected,
+                    }),
+                };
+                emit_list(out, &svc.list_devices(&filter)?, |l| {
+                    render::devices::list(l, *wide, color)
+                })
+            }
             DevicesCommand::Get { id, all_ports } => emit(out, &svc.get_device(id)?, |d| {
                 render::devices::get(d, *all_ports, color)
             }),
         },
         Command::Clients { command } => match command {
-            ClientsCommand::List { status, wide } => {
-                let status = status.map(|s| match s {
-                    StatusFilter::Online => ClientStatus::Online,
-                    StatusFilter::Offline => ClientStatus::Offline,
-                });
-                emit_list(out, &svc.list_clients(status)?, |l| {
-                    render::clients::list(l, *wide, color, &TimeZone::system())
+            ClientsCommand::List(args) => {
+                let filter = ClientFilter {
+                    // Online only unless --status or --all is given, like ports.
+                    status: if args.all {
+                        None
+                    } else {
+                        Some(match args.status {
+                            Some(StatusFilter::Offline) => ClientStatus::Offline,
+                            Some(StatusFilter::Online) | None => ClientStatus::Online,
+                        })
+                    },
+                    connection: args.connection.map(|c| match c {
+                        ConnectionFilter::Wired => ConnectionType::Wired,
+                        ConnectionFilter::Wireless => ConnectionType::Wireless,
+                    }),
+                    device_id: args.device.clone(),
+                    ssid_id: args.ssid.clone(),
+                };
+                emit_list(out, &svc.list_clients(&filter)?, |l| {
+                    render::clients::list(l, args.wide, color, &TimeZone::system())
                 })
             }
             ClientsCommand::Get { id } => emit(out, &svc.get_client(id)?, |c| {
@@ -462,8 +496,8 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
                     ModeFilter::Trunk => VlanMode::Trunk,
                     ModeFilter::Access => VlanMode::Access,
                 }),
-                // hlctl defaults to up-only unless --state or --all-ports is given.
-                state: if args.all_ports {
+                // hlctl defaults to up-only unless --state or --all is given.
+                state: if args.all {
                     None
                 } else {
                     Some(match args.state {

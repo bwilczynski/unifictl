@@ -113,10 +113,11 @@ so a `list` followed by a few `get`s asks the controller once. Pass
 
 ```
 unifictl status
-unifictl devices list [--wide] | get <id> [--all-ports]
-unifictl clients list [--status online|offline] [--wide] | get <id> | traffic [<id> | --by-app] [-S WHEN] [-U WHEN]
+unifictl devices list [--type gateway|switch|access-point] [--status connected|disconnected] [--wide] | get <id> [--all-ports]
+unifictl clients list [--status online|offline | --all] [--connection wired|wireless] [--device ID] [--ssid ID] [--wide]
+unifictl clients get <id> | traffic [<id> | --by-app] [-S WHEN] [-U WHEN]
 unifictl topology [--include-clients] [--include-wireless]
-unifictl ports list [--device ID] [--mode trunk|access] [--state up|down|disabled | --all-ports] [--vlan N] [--wide]
+unifictl ports list [--device ID] [--mode trunk|access] [--state up|down|disabled | --all] [--vlan N] [--wide]
 unifictl radios list [--device ID] [--wide]
 unifictl vlans|ssids|wans list [--wide] | get <id>
 unifictl wans get <id> [-S WHEN]
@@ -126,6 +127,11 @@ unifictl logs [-n N] [-S WHEN] [-U WHEN] [-p LEVEL] [-r] [-f] [--category CAT] [
 Every command takes `-o json` and `--refresh`. `devices`, `clients`, `vlans`, `ssids`, `wans` and `radios list`,
 and `clients traffic`, also take `-o ids`, printing one ID per line for scripts (`unifictl clients list --status offline -o ids | xargs -n1 unifictl clients get`).
 IDs are kebab-case names (`us-8-60w`); clients add the last two MAC bytes (`nas-1-0002`).
+
+`clients list` shows online clients and `ports list` shows up ports, unless
+you pick a `--status`/`--state` or pass `--all`. Filters combine, so
+`unifictl clients list --device ap-office --connection wireless` lists who is
+on that access point right now.
 
 `devices list` and `clients list` show an EXPERIENCE column (UniFi's score)
 for spotting trouble quickly; `wans list` shows each WAN's own uptime and its
