@@ -2,10 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::format::format_link_speed;
 use super::style;
 use crate::error::{Error, Result};
-use crate::model::{DeviceType, NetworkTopology, TopologyEdge, TopologyNode};
+use crate::model::{ConnectionRef, DeviceType, NetworkTopology, TopologyEdge, TopologyNode};
 
 struct Child<'a> {
     id: &'a str,
@@ -49,8 +48,14 @@ pub fn tree(topo: &NetworkTopology, include_wireless: bool, color: bool) -> Resu
     for edge in &topo.edges {
         match edge {
             TopologyEdge::Wired(e) => {
+                let speed = || match e.source {
+                    ConnectionRef::Device(_) => {
+                        style::uplink_speed(e.link_speed, e.max_link_speed, e.full_duplex, color)
+                    }
+                    ConnectionRef::Client(_) => style::wired_speed(e.link_speed, color),
+                };
                 let label = match (e.port, e.link_speed) {
-                    (Some(p), Some(ls)) => format!("[port {p}, {}]", format_link_speed(ls)),
+                    (Some(p), Some(_)) => format!("[port {p}, {}]", speed()),
                     (Some(p), None) => format!("[port {p}]"),
                     _ => String::new(),
                 };
@@ -61,7 +66,7 @@ pub fn tree(topo: &NetworkTopology, include_wireless: bool, color: bool) -> Resu
             }
             TopologyEdge::Wireless(e) if include_wireless => {
                 let label = match e.signal_strength {
-                    Some(s) => format!("[{}, {s} dBm]", e.ssid),
+                    Some(_) => format!("[{}, {}]", e.ssid, style::signal(e.signal_strength, color)),
                     None => format!("[{}]", e.ssid),
                 };
                 children.entry(&e.target.id).or_default().push(Child {
@@ -152,6 +157,20 @@ mod tests {
             with_wireless.contains("MacBook Pro (client, wireless, online) [homelab, -69 dBm]")
         );
         assert!(with_wireless.contains("Kindle Paperwhite (client, wireless, offline) [homelab]"));
+    }
+
+    #[test]
+    fn edges_are_graded_like_other_views() {
+        let out = tree(&topo(true), true, true).unwrap();
+        assert!(
+            out.contains("[port 5, \x1b[33m100 Mbps\x1b[0m]"),
+            "uplink below max is fair"
+        );
+        assert!(
+            out.contains("[port 3, \x1b[32m1 GbE\x1b[0m]"),
+            "wired client at 1 GbE is good"
+        );
+        assert!(out.contains("[homelab, \x1b[33m-69 dBm\x1b[0m]"));
     }
 
     #[test]

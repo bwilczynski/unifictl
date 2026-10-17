@@ -475,6 +475,11 @@ pub struct TopologyWiredEdge {
     pub port: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link_speed: Option<LinkSpeed>,
+    /// What both ends of a device uplink allow; not set for clients.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_link_speed: Option<LinkSpeed>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full_duplex: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
