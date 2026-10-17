@@ -14,7 +14,7 @@ use crate::app;
 use crate::cli::{Cli, Shell};
 use crate::error::{Error, Result};
 use crate::model::DeviceType;
-use crate::service::Service;
+use crate::service::{ClientFilter, DeviceFilter, Service};
 
 /// Environment variable that turns a run into a completion request.
 const VAR: &str = "COMPLETE";
@@ -63,7 +63,7 @@ fn completer_path() -> String {
 
 pub fn devices() -> Vec<CompletionCandidate> {
     ids(|svc| {
-        let devices = svc.list_devices()?.items;
+        let devices = svc.list_devices(&DeviceFilter::default())?.items;
         Ok(devices
             .into_iter()
             .map(|d| (d.id, format!("{} ({})", d.name, d.device_type)))
@@ -74,7 +74,7 @@ pub fn devices() -> Vec<CompletionCandidate> {
 /// Devices that `ports list` covers: switches and gateways.
 pub fn port_devices() -> Vec<CompletionCandidate> {
     ids(|svc| {
-        let devices = svc.list_devices()?.items;
+        let devices = svc.list_devices(&DeviceFilter::default())?.items;
         Ok(devices
             .into_iter()
             .filter(|d| matches!(d.device_type, DeviceType::Switch | DeviceType::Gateway))
@@ -86,7 +86,7 @@ pub fn port_devices() -> Vec<CompletionCandidate> {
 /// Devices that `radios list` covers: access points.
 pub fn access_points() -> Vec<CompletionCandidate> {
     ids(|svc| {
-        let devices = svc.list_devices()?.items;
+        let devices = svc.list_devices(&DeviceFilter::default())?.items;
         Ok(devices
             .into_iter()
             .filter(|d| d.device_type == DeviceType::AccessPoint)
@@ -97,7 +97,7 @@ pub fn access_points() -> Vec<CompletionCandidate> {
 
 pub fn clients() -> Vec<CompletionCandidate> {
     ids(|svc| {
-        let clients = svc.list_clients(None)?.items;
+        let clients = svc.list_clients(&ClientFilter::default())?.items;
         Ok(clients
             .into_iter()
             .map(|c| (c.id, format!("{} ({})", c.name, c.status)))

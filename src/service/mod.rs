@@ -14,6 +14,8 @@ mod traffic;
 mod vlans;
 mod wans;
 
+pub use clients::ClientFilter;
+pub use devices::DeviceFilter;
 pub use logs::{FOLLOW_INTERVAL, Follower, LogFilter, LogPage, RefIndex, backoff, follow_loop};
 pub use ports::PortFilter;
 pub use radios::RadioFilter;

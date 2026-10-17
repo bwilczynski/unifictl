@@ -6,16 +6,53 @@ use crate::error::{Error, Result};
 use crate::model::*;
 use crate::unifi::types::ClientV2;
 
+/// Query filters for `clients list`; `None` means "do not filter".
+#[derive(Debug, Clone, Default)]
+pub struct ClientFilter {
+    pub status: Option<ClientStatus>,
+    pub connection: Option<ConnectionType>,
+    /// The upstream device: access point, switch or gateway.
+    pub device_id: Option<String>,
+    /// As `ssids list` shows it; only wireless clients match.
+    pub ssid_id: Option<String>,
+}
+
+impl ClientFilter {
+    fn matches(&self, c: &NetworkClient) -> bool {
+        if self.connection.is_some_and(|t| c.connection_type != t) {
+            return false;
+        }
+        let device = match &c.connected_to {
+            ClientConnection::Wired(w) => &w.device,
+            ClientConnection::Wireless(w) => &w.device,
+        };
+        if self.device_id.as_deref().is_some_and(|id| device.id != id) {
+            return false;
+        }
+        !self
+            .ssid_id
+            .as_deref()
+            .is_some_and(|id| match &c.connected_to {
+                ClientConnection::Wireless(w) => to_kebab(&w.ssid) != id,
+                ClientConnection::Wired(_) => true,
+            })
+    }
+}
+
 impl Service {
-    /// v2 API clients; `None` → active followed by offline history.
-    pub fn list_clients(&self, status: Option<ClientStatus>) -> Result<NetworkClientList> {
-        let raw = match status {
+    /// v2 API clients; no status → active followed by offline history.
+    pub fn list_clients(&self, filter: &ClientFilter) -> Result<NetworkClientList> {
+        let raw = match filter.status {
             Some(ClientStatus::Online) => self.api.active_clients()?,
             Some(ClientStatus::Offline) => self.api.offline_clients(self.history_days)?,
             None => self.api.all_clients(self.history_days)?,
         };
         Ok(NetworkClientList {
-            items: raw.iter().map(network_client).collect(),
+            items: raw
+                .iter()
+                .map(network_client)
+                .filter(|c| filter.matches(c))
+                .collect(),
         })
     }
 
@@ -120,18 +157,34 @@ mod tests {
     #[test]
     fn list_all_online_offline() {
         let s = svc(fixtures());
-        assert_eq!(s.list_clients(None).unwrap().items.len(), 5);
-        let online = s.list_clients(Some(ClientStatus::Online)).unwrap().items;
+        assert_eq!(
+            s.list_clients(&ClientFilter::default())
+                .unwrap()
+                .items
+                .len(),
+            5
+        );
+        let status = |status| ClientFilter {
+            status: Some(status),
+            ..Default::default()
+        };
+        let online = s.list_clients(&status(ClientStatus::Online)).unwrap().items;
         assert_eq!(online.len(), 3);
         assert!(online.iter().all(|c| c.status == ClientStatus::Online));
-        let offline = s.list_clients(Some(ClientStatus::Offline)).unwrap().items;
+        let offline = s
+            .list_clients(&status(ClientStatus::Offline))
+            .unwrap()
+            .items;
         assert_eq!(offline.len(), 2);
         assert!(offline.iter().all(|c| c.status == ClientStatus::Offline));
     }
 
     #[test]
     fn list_ids_and_fields() {
-        let items = svc(fixtures()).list_clients(None).unwrap().items;
+        let items = svc(fixtures())
+            .list_clients(&ClientFilter::default())
+            .unwrap()
+            .items;
         let by_id = |id: &str| {
             items
                 .iter()
@@ -153,7 +206,7 @@ mod tests {
     fn list_empty() {
         assert!(
             svc(FixtureApi::default())
-                .list_clients(None)
+                .list_clients(&ClientFilter::default())
                 .unwrap()
                 .items
                 .is_empty()
@@ -240,7 +293,7 @@ mod tests {
     #[test]
     fn get_equals_list_item() {
         let s = svc(fixtures());
-        for c in s.list_clients(None).unwrap().items {
+        for c in s.list_clients(&ClientFilter::default()).unwrap().items {
             assert_eq!(s.get_client(&c.id).unwrap(), c, "{}", c.id);
         }
     }

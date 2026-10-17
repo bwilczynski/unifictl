@@ -206,7 +206,7 @@ fn port_sections(t: &mut Table, ports: &[DevicePort], all_ports: bool, color: bo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::service::Service;
+    use crate::service::{DeviceFilter, Service};
     use crate::unifi::fixtures::FixtureApi;
 
     fn svc() -> Service {
@@ -218,7 +218,11 @@ mod tests {
 
     #[test]
     fn default_list_is_lean_with_experience() {
-        let out = list(&svc().list_devices().unwrap(), false, false);
+        let out = list(
+            &svc().list_devices(&DeviceFilter::default()).unwrap(),
+            false,
+            false,
+        );
         assert_eq!(
             out,
             "\
@@ -250,7 +254,11 @@ cgf-01            CGF-01            192.168.1.10  gateway      connected  -
 
     #[test]
     fn wide_list_adds_columns_after_default() {
-        let out = list(&svc().list_devices().unwrap(), true, false);
+        let out = list(
+            &svc().list_devices(&DeviceFilter::default()).unwrap(),
+            true,
+            false,
+        );
         assert_eq!(
             cells(out.lines().next().unwrap()),
             [
@@ -281,7 +289,11 @@ cgf-01            CGF-01            192.168.1.10  gateway      connected  -
 
     #[test]
     fn wide_list_grades_uplinks() {
-        let out = list(&svc().list_devices().unwrap(), true, true);
+        let out = list(
+            &svc().list_devices(&DeviceFilter::default()).unwrap(),
+            true,
+            true,
+        );
         let line = |id: &str| out.lines().find(|l| l.starts_with(id)).unwrap().to_string();
         assert!(
             line("uap-01").contains("\x1b[33m100 Mbps\x1b[0m"),

@@ -66,11 +66,29 @@ impl<'a> PortIndex<'a> {
     }
 }
 
+/// Query filters for `devices list`; `None` means "do not filter".
+#[derive(Debug, Clone, Default)]
+pub struct DeviceFilter {
+    pub device_type: Option<DeviceType>,
+    pub status: Option<DeviceStatus>,
+}
+
+impl DeviceFilter {
+    fn matches(&self, d: &NetworkDevice) -> bool {
+        self.device_type.is_none_or(|t| d.device_type == t)
+            && self.status.is_none_or(|s| d.status == s)
+    }
+}
+
 impl Service {
-    pub fn list_devices(&self) -> Result<NetworkDeviceList> {
+    pub fn list_devices(&self, filter: &DeviceFilter) -> Result<NetworkDeviceList> {
         let devices = self.api.devices()?;
         let by_mac = mac_to_device(&devices);
-        let items = devices.iter().map(|d| network_device(d, &by_mac)).collect();
+        let items = devices
+            .iter()
+            .map(|d| network_device(d, &by_mac))
+            .filter(|d| filter.matches(d))
+            .collect();
         Ok(NetworkDeviceList { items })
     }
 
@@ -458,7 +476,9 @@ mod tests {
 
     #[test]
     fn list_devices() {
-        let list = svc(fixtures()).list_devices().unwrap();
+        let list = svc(fixtures())
+            .list_devices(&DeviceFilter::default())
+            .unwrap();
         assert_eq!(list.items.len(), 7);
         let gw = &list.items[6];
         assert_eq!(gw.id, "cgf-01");
@@ -485,7 +505,9 @@ mod tests {
 
     #[test]
     fn list_devices_empty() {
-        let list = svc(FixtureApi::default()).list_devices().unwrap();
+        let list = svc(FixtureApi::default())
+            .list_devices(&DeviceFilter::default())
+            .unwrap();
         assert_eq!(serde_json::to_value(&list).unwrap(), json!({"items": []}));
     }
 
@@ -495,7 +517,10 @@ mod tests {
             fail: true,
             ..Default::default()
         };
-        assert!(matches!(svc(api).list_devices(), Err(Error::Unifi(_))));
+        assert!(matches!(
+            svc(api).list_devices(&DeviceFilter::default()),
+            Err(Error::Unifi(_))
+        ));
     }
 
     // ---- detail ----
@@ -926,7 +951,10 @@ mod tests {
 
     #[test]
     fn list_devices_carries_experience_and_uplink() {
-        let items = svc(fixtures()).list_devices().unwrap().items;
+        let items = svc(fixtures())
+            .list_devices(&DeviceFilter::default())
+            .unwrap()
+            .items;
         let by_id = |id: &str| items.iter().find(|d| d.id == id).unwrap();
         assert_eq!(by_id("uap-01").experience, Some(98));
         assert_eq!(by_id("us-8").experience, Some(72));
@@ -969,7 +997,7 @@ mod tests {
     #[test]
     fn list_item_is_the_detail_base() {
         let s = svc(fixtures());
-        let items = s.list_devices().unwrap().items;
+        let items = s.list_devices(&DeviceFilter::default()).unwrap().items;
         for d in &items {
             let base = match s.get_device(&d.id).unwrap() {
                 NetworkDeviceDetail::Switch(x) => x.base,
@@ -989,7 +1017,10 @@ mod tests {
                 p.media = "SFP28".into();
             }
         }
-        let items = svc(api).list_devices().unwrap().items;
+        let items = svc(api)
+            .list_devices(&DeviceFilter::default())
+            .unwrap()
+            .items;
         let flex = items.iter().find(|d| d.id == "usw-flex-2-5g-8").unwrap();
         assert_eq!(
             flex.uplink.as_ref().unwrap().max_link_speed,
@@ -1017,9 +1048,45 @@ mod tests {
             .find(|d| d.name == "UAP-01")
             .unwrap()
             .state = 0;
-        let items = svc(api).list_devices().unwrap().items;
+        let items = svc(api)
+            .list_devices(&DeviceFilter::default())
+            .unwrap()
+            .items;
         let ap = items.iter().find(|d| d.id == "uap-01").unwrap();
         assert_eq!(ap.status, DeviceStatus::Disconnected);
         assert_eq!(ap.experience, None, "a stale score is not live");
+    }
+
+    #[test]
+    fn list_filters_by_type_and_status() {
+        let mut api = fixtures();
+        api.devices
+            .iter_mut()
+            .find(|d| d.name == "UAP-01")
+            .unwrap()
+            .state = 0;
+        let ids = |filter: DeviceFilter| -> Vec<String> {
+            svc(api.clone())
+                .list_devices(&filter)
+                .unwrap()
+                .items
+                .into_iter()
+                .map(|d| d.id)
+                .collect()
+        };
+        assert_eq!(
+            ids(DeviceFilter {
+                status: Some(DeviceStatus::Disconnected),
+                ..Default::default()
+            }),
+            ["uap-01"]
+        );
+        assert_eq!(
+            ids(DeviceFilter {
+                device_type: Some(DeviceType::AccessPoint),
+                status: Some(DeviceStatus::Connected),
+            }),
+            ["uap-02"]
+        );
     }
 }

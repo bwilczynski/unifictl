@@ -130,6 +130,12 @@ pub enum Shell {
 pub enum DevicesCommand {
     /// List devices
     List {
+        /// Filter by device type
+        #[arg(long = "type", value_enum, value_name = "TYPE")]
+        device_type: Option<DeviceTypeFilter>,
+        /// Filter by status
+        #[arg(long, value_enum)]
+        status: Option<DeviceStatusFilter>,
         /// Show additional columns (MAC, model, firmware, uptime, uplink, traffic)
         #[arg(long)]
         wide: bool,
@@ -145,17 +151,24 @@ pub enum DevicesCommand {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum DeviceTypeFilter {
+    Gateway,
+    Switch,
+    #[value(alias = "ap")]
+    AccessPoint,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum DeviceStatusFilter {
+    Connected,
+    Disconnected,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum ClientsCommand {
-    /// List clients (online and recently offline)
-    List {
-        /// Filter by status
-        #[arg(long, value_enum)]
-        status: Option<StatusFilter>,
-        /// Show additional columns (MAC, uplink, SSID, signal, link, traffic, uptime, last seen)
-        #[arg(long)]
-        wide: bool,
-    },
+    /// List clients (online only, unless --status or --all is given)
+    List(ClientsListArgs),
     /// Show one client
     Get {
         /// Client ID, as shown by `clients list`
@@ -164,6 +177,34 @@ pub enum ClientsCommand {
     },
     /// Internet traffic per client, or by application
     Traffic(TrafficArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ClientsListArgs {
+    /// Filter by status
+    #[arg(long, value_enum, conflicts_with = "all")]
+    pub status: Option<StatusFilter>,
+    /// Filter by connection type
+    #[arg(long, value_enum)]
+    pub connection: Option<ConnectionFilter>,
+    /// Filter by the device (access point, switch or gateway) the client is attached to
+    #[arg(long, value_name = "ID", add = ArgValueCandidates::new(completion::devices))]
+    pub device: Option<String>,
+    /// Filter to wireless clients on this SSID
+    #[arg(long, value_name = "ID", add = ArgValueCandidates::new(completion::ssids))]
+    pub ssid: Option<String>,
+    /// Show additional columns (MAC, uplink, SSID, signal, link, traffic, uptime, last seen)
+    #[arg(long)]
+    pub wide: bool,
+    /// Show offline clients too (overrides the default status=online filter)
+    #[arg(long)]
+    pub all: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ConnectionFilter {
+    Wired,
+    Wireless,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -203,7 +244,7 @@ pub struct PortsListArgs {
     #[arg(long, value_enum)]
     pub mode: Option<ModeFilter>,
     /// Filter by port state
-    #[arg(long, value_enum, conflicts_with = "all_ports")]
+    #[arg(long, value_enum, conflicts_with = "all")]
     pub state: Option<StateFilter>,
     /// Filter to ports carrying this VLAN ID
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=4094))]
@@ -213,7 +254,7 @@ pub struct PortsListArgs {
     pub wide: bool,
     /// Show all ports (overrides the default state=up filter)
     #[arg(long)]
-    pub all_ports: bool,
+    pub all: bool,
 }
 
 #[derive(Debug, Subcommand)]
