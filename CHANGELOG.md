@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/bwilczynski/unifictl/compare/v0.4.0...v0.4.1) - 2026-10-17
+
+### Fixed
+
+- sanitize network-controlled text in terminal output
+- reject API error envelopes instead of returning empty results
+- keep a future --since boundary when following logs
+- grade signal and link speed in topology
+
 ## [0.4.0](https://github.com/bwilczynski/unifictl/compare/v0.3.6...v0.4.0) - 2026-10-17
 
 ### Added
