@@ -4,7 +4,7 @@ rust = { version = "1.99.0", profile = "minimal", components = ["clippy", "rustf
 cargo-dist = "0.33.0"
 # README demos only (mise run demo); vhs also needs ffmpeg on PATH.
 vhs = "0.12.1"
-ttyd = "1.7.7"
+ttyd = { version = "1.7.7", os = ["linux", "windows"] }
 
 [tasks]
 build = "cargo build --release"

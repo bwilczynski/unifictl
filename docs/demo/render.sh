@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Re-renders the README demos from docs/demo/*.tape against the demo fixtures.
-# Run from anywhere: `mise run demo`. Needs vhs, ttyd (both in mise.toml) and ffmpeg.
+# Run from anywhere: `mise run demo`. Needs vhs, ttyd and ffmpeg. mise installs vhs
+# and ttyd, except on macOS where ttyd has no release: `brew install ttyd`.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
