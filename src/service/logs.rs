@@ -356,7 +356,9 @@ impl Service {
     ) -> Result<(Vec<SystemLogEntry>, Cursor)> {
         let mut out = Vec::new();
         let mut cursor = Cursor::default();
-        if limit == Some(0) {
+        // A window that starts in the future (e.g. `--since tomorrow`) has
+        // nothing yet; don't send the controller an inverted range.
+        if limit == Some(0) || from.is_some_and(|from| from > to) {
             return Ok((out, cursor));
         }
         let page_size = match limit {
@@ -426,14 +428,15 @@ impl Follower {
     /// New matching entries up to `now_ms`, oldest first.
     pub fn poll(&mut self, svc: &Service, now_ms: i64, tz: &TimeZone) -> Result<Vec<LogEntry>> {
         // Fetch every entry in the window so the cursor moves past
-        // non-matching ones too; filter by `self.scope` afterwards.
-        let (raw, _) = svc.collect_log(
-            &self.filter,
-            Some(self.cursor.last_ms),
-            now_ms,
-            &LogScope::default(),
-            None,
-        )?;
+        // non-matching ones too; filter by `self.scope` afterwards. Never
+        // start before `--since`: the cursor sits at the first fetch's `now`
+        // when that came back empty.
+        let from = match self.filter.since_ms {
+            Some(since) => self.cursor.last_ms.max(since),
+            None => self.cursor.last_ms,
+        };
+        let (raw, _) =
+            svc.collect_log(&self.filter, Some(from), now_ms, &LogScope::default(), None)?;
         let fresh: Vec<SystemLogEntry> = raw.into_iter().filter(|e| !self.cursor.has(e)).collect();
         for e in &fresh {
             self.cursor.see(e);
@@ -1016,6 +1019,36 @@ mod tests {
             .unwrap();
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].id, "65f00000000000000000000a");
+    }
+
+    #[test]
+    fn follow_keeps_a_future_since_boundary() {
+        let since = NOW_MS + 86_400_000;
+        let f = LogFilter {
+            since_ms: Some(since),
+            ..Default::default()
+        };
+        let mut api = fixtures();
+        let mut early = entry(&api, "0a");
+        early.id = "65f00000000000000000000b".into();
+        early.timestamp = NOW_MS + 1000;
+        let mut late = early.clone();
+        late.id = "65f00000000000000000000c".into();
+        late.timestamp = since + 1000;
+        api.log_entries.extend([early, late]);
+        let svc = svc(api);
+        let page = svc.logs(&f, NOW_MS, &TimeZone::UTC).unwrap();
+        let (shown, mut follower) = page.follow(f);
+        assert!(shown.is_empty());
+        assert!(
+            follower
+                .poll(&svc, NOW_MS + 5000, &TimeZone::UTC)
+                .unwrap()
+                .is_empty()
+        );
+        let got = follower.poll(&svc, since + 5000, &TimeZone::UTC).unwrap();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].id, "65f00000000000000000000c");
     }
 
     #[test]
