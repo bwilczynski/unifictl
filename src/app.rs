@@ -570,7 +570,11 @@ fn emit_list<T: Serialize + Ids>(
     table: impl FnOnce(&T) -> String,
 ) -> Result<String> {
     if out == OutputFormat::Ids {
-        return Ok(value.ids().iter().map(|id| format!("{id}\n")).collect());
+        return Ok(value
+            .ids()
+            .iter()
+            .map(|id| format!("{}\n", render::style::printable(id)))
+            .collect());
     }
     emit(out, value, table)
 }

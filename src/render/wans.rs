@@ -21,9 +21,9 @@ pub fn list(list: &WanList, wide: bool, color: bool) -> String {
     t.row(&header);
     for w in &list.items {
         let mut row = vec![
-            w.id.clone(),
+            style::printable(&w.id),
             style::name(&w.name, color),
-            w.ip_address.clone(),
+            style::printable(&w.ip_address),
             uptime(w),
             style::wan_status(w.status, color),
             style::availability(w.availability, color),
@@ -33,7 +33,7 @@ pub fn list(list: &WanList, wide: bool, color: bool) -> String {
             row.push(if w.dns_servers.is_empty() {
                 "-".to_string()
             } else {
-                w.dns_servers.join(", ")
+                style::printable(&w.dns_servers.join(", "))
             });
         }
         t.row(&row.iter().map(String::as_str).collect::<Vec<_>>());
@@ -45,9 +45,9 @@ pub fn get(d: &WanDetail, tz: &TimeZone, color: bool) -> String {
     let w = &d.wan;
     let mut t = Table::new();
     t.row(&["FIELD", "VALUE"]);
-    t.row(&["ID", &w.id]);
+    t.row(&["ID", &style::printable(&w.id)]);
     t.row(&["NAME", &style::name(&w.name, color)]);
-    t.row(&["IP", &w.ip_address]);
+    t.row(&["IP", &style::printable(&w.ip_address)]);
     match w.downtime {
         Some(d) if w.uptime.is_none() => t.row(&["DOWNTIME", &format_uptime(d)]),
         _ => t.row(&["UPTIME", &uptime(w)]),
@@ -59,7 +59,7 @@ pub fn get(d: &WanDetail, tz: &TimeZone, color: bool) -> String {
     }
     t.row(&["AVAILABILITY", &availability]);
     t.row(&["LATENCY", &style::latency(w.latency, color)]);
-    t.row(&["DNS", &w.dns_servers.join(", ")]);
+    t.row(&["DNS", &style::printable(&w.dns_servers.join(", "))]);
     let Some(o) = &d.outages else {
         return t.finish();
     };

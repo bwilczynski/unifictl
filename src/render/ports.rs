@@ -29,7 +29,7 @@ fn dash() -> String {
 }
 
 fn vlan_label(v: &VlanRef) -> String {
-    format!("{} ({})", v.name, v.vlan_id)
+    format!("{} ({})", style::printable(&v.name), v.vlan_id)
 }
 
 pub fn decorate_port(p: &DevicePort) -> PortRow {
@@ -50,7 +50,7 @@ pub fn decorate_port(p: &DevicePort) -> PortRow {
         }
     };
     PortRow {
-        label: p.label.clone().unwrap_or_else(dash),
+        label: p.label.as_deref().map_or_else(dash, style::printable),
         link_speed: match (p.state, p.link_speed) {
             (PortState::Up, Some(ls)) => format_link_speed(ls).to_string(),
             _ => dash(),
@@ -79,7 +79,7 @@ pub fn decorate_port(p: &DevicePort) -> PortRow {
         connected_to: p
             .connected_to
             .as_ref()
-            .map(|c| c.name().to_string())
+            .map(|c| style::printable(c.name()))
             .unwrap_or_else(dash),
     }
 }

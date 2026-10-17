@@ -11,7 +11,7 @@ pub fn clients(list: &ClientTrafficList, color: bool) -> String {
     t.row(&["ID", "NAME", "DOWN", "UP", "TOTAL", "TOP APP"]);
     for c in &list.items {
         t.row(&[
-            &c.id,
+            &style::printable(&c.id),
             &style::name(&c.name, color),
             &style::down(&format_bytes(c.bytes_received), color),
             &style::up(&format_bytes(c.bytes_transmitted), color),
@@ -30,7 +30,7 @@ pub fn client(list: &ClientAppTrafficList, color: bool) -> String {
     for a in &list.items {
         t.row(&[
             &style::app_name(&a.app, color),
-            &a.app.category.name,
+            &style::printable(&a.app.category.name),
             &style::down(&format_bytes(a.bytes_received), color),
             &style::up(&format_bytes(a.bytes_transmitted), color),
             &format_bytes(a.total_bytes),
@@ -46,7 +46,7 @@ pub fn apps(list: &AppTrafficList, color: bool) -> String {
     for a in &list.items {
         t.row(&[
             &style::app_name(&a.app, color),
-            &a.app.category.name,
+            &style::printable(&a.app.category.name),
             &a.client_count.to_string(),
             &style::down(&format_bytes(a.bytes_received), color),
             &style::up(&format_bytes(a.bytes_transmitted), color),

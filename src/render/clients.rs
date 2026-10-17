@@ -27,9 +27,9 @@ pub fn list(list: &NetworkClientList, wide: bool, color: bool, tz: &TimeZone) ->
     t.row(&header);
     for c in &list.items {
         let mut row = vec![
-            c.id.clone(),
+            style::printable(&c.id),
             style::name(&c.name, color),
-            c.ip.clone().unwrap_or_default(),
+            style::printable(c.ip.as_deref().unwrap_or_default()),
             style::client_status(c.status, color),
             c.connection_type.as_str().to_string(),
             style::experience(c.experience, color),
@@ -52,8 +52,8 @@ fn wide_cells(c: &NetworkClient, color: bool, tz: &TimeZone) -> [String; 9] {
         ClientConnection::Wired(w) => (
             match (w.device.name.as_str(), w.port) {
                 ("", _) => dash(),
-                (name, Some(port)) => format!("{name} #{port}"),
-                (name, None) => name.to_string(),
+                (name, Some(port)) => format!("{} #{port}", style::printable(name)),
+                (name, None) => style::printable(name),
             },
             dash(),
             dash(),
@@ -63,12 +63,12 @@ fn wide_cells(c: &NetworkClient, color: bool, tz: &TimeZone) -> [String; 9] {
             if w.device.name.is_empty() {
                 dash()
             } else {
-                w.device.name.clone()
+                style::printable(&w.device.name)
             },
             if w.ssid.is_empty() || c.status == ClientStatus::Offline {
                 dash()
             } else {
-                w.ssid.clone()
+                style::printable(&w.ssid)
             },
             style::signal(w.signal_strength, color),
             w.rate_mbps.map_or_else(dash, |m| format!("{m} Mbps")),
@@ -80,7 +80,7 @@ fn wide_cells(c: &NetworkClient, color: bool, tz: &TimeZone) -> [String; 9] {
             .map_or_else(dash, |r| paint(&format_bytes_per_sec(f(r)), color))
     };
     [
-        c.mac.clone(),
+        style::printable(&c.mac),
         uplink,
         ssid,
         signal,
@@ -106,7 +106,7 @@ pub fn get(c: &NetworkClient, color: bool, tz: &TimeZone) -> String {
     }
     match &c.connected_to {
         ClientConnection::Wired(w) => {
-            t.row(&["SWITCH", &w.device.name]);
+            t.row(&["SWITCH", &style::printable(&w.device.name)]);
             if let Some(port) = w.port {
                 t.row(&["PORT", &port.to_string()]);
             }
@@ -115,8 +115,8 @@ pub fn get(c: &NetworkClient, color: bool, tz: &TimeZone) -> String {
             }
         }
         ClientConnection::Wireless(w) => {
-            t.row(&["AP", &w.device.name]);
-            t.row(&["SSID", &w.ssid]);
+            t.row(&["AP", &style::printable(&w.device.name)]);
+            t.row(&["SSID", &style::printable(&w.ssid)]);
             if w.signal_strength.is_some() {
                 t.row(&["SIGNAL", &style::signal(w.signal_strength, color)]);
             }
@@ -155,6 +155,34 @@ mod tests {
             Box::new(FixtureApi::load(&FixtureApi::default_dir()).unwrap()),
             30,
         )
+    }
+
+    #[test]
+    fn controller_text_cannot_reach_the_terminal_as_escape_codes() {
+        let mut api = FixtureApi::load(&FixtureApi::default_dir()).unwrap();
+        api.active[0].name = Some("host\x1b]0;INJECTED\x07".into());
+        api.active[0].essid = Some("\x1b[8mhidden\tssid".into());
+        api.active[0].last_uplink_name = "ap\x1b[2J".into();
+        api.active[0].ip = "\x1b[31m192.0.2.1".into();
+        api.active[0].mac = "\x1b[34mmac\x1b[0m".into();
+        let svc = Service::new(Box::new(api), 30);
+        let clients = svc.list_clients(&ClientFilter::default()).unwrap();
+        for color in [false, true] {
+            let out = list(&clients, true, color, &TimeZone::UTC);
+            let row = out.lines().nth(1).unwrap();
+            assert!(row.contains("host\u{fffd}]0;INJECTED\u{fffd}"), "{row:?}");
+            assert!(row.contains("\u{fffd}[8mhidden\u{fffd}ssid"), "{row:?}");
+            assert!(row.contains("ap\u{fffd}[2J"), "{row:?}");
+            assert!(row.contains("\u{fffd}[31m192.0.2.1"), "{row:?}");
+            assert!(row.contains("\u{fffd}[34mmac\u{fffd}[0m"), "{row:?}");
+            assert!(!out.contains('\x07') && !out.contains('\t'), "{out:?}");
+            assert_eq!(out.contains('\x1b'), color, "{out:?}");
+            let detail = get(&clients.items[0], color, &TimeZone::UTC);
+            assert!(
+                !detail.contains("\x1b]") && !detail.contains("\x1b[8m"),
+                "{detail:?}"
+            );
+        }
     }
 
     #[test]

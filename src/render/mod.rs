@@ -24,7 +24,8 @@ use tabwriter::TabWriter;
 /// Tab-separated rows aligned like Go's `tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)`.
 /// `flush()` ends a column block (Go templates' `{{ flush }}`), so sections
 /// get independent widths. Cells may contain `ESC[…m` colour codes; they do
-/// not count toward width.
+/// not count toward width. Any other control character in a cell, such as a
+/// tab or an escape sequence in a client's name, is replaced by U+FFFD.
 pub struct Table {
     tw: TabWriter<Vec<u8>>,
 }
@@ -44,12 +45,13 @@ impl Table {
     }
 
     pub fn row(&mut self, cells: &[&str]) {
+        let cells: Vec<String> = cells.iter().map(|c| style::terminal_safe(c)).collect();
         writeln!(self.tw, "{}", cells.join("\t")).expect("write to memory");
     }
 
     /// A line with no columns, e.g. `--- PORTS ---`.
     pub fn line(&mut self, text: &str) {
-        writeln!(self.tw, "{text}").expect("write to memory");
+        writeln!(self.tw, "{}", style::terminal_safe(text)).expect("write to memory");
     }
 
     pub fn blank(&mut self) {
@@ -88,6 +90,14 @@ mod tests {
         t.line("--- X ---");
         t.row(&["LONGVALUE", "C"]);
         assert_eq!(t.finish(), "A  B\n\n--- X ---\nLONGVALUE  C\n");
+    }
+
+    #[test]
+    fn control_characters_in_cells_do_not_split_columns() {
+        let mut t = Table::new();
+        t.row(&["a\tb\nc", "x"]);
+        t.line("\x1b]0;t\x07");
+        assert_eq!(t.finish(), "a\u{fffd}b\u{fffd}c  x\n\u{fffd}]0;t\u{fffd}\n");
     }
 
     #[test]

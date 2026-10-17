@@ -38,10 +38,12 @@ fn dbm(v: Option<i64>) -> String {
 /// Cells for `header(wide)`; absent values are `-`.
 pub(crate) fn cells(r: &Radio, wide: bool, color: bool) -> Vec<String> {
     let mut row = vec![
-        r.band.clone(),
+        style::printable(&r.band),
         num(r.channel),
         num(r.width),
-        r.tx_power_mode.clone().unwrap_or_else(|| "-".to_string()),
+        r.tx_power_mode
+            .as_deref()
+            .map_or_else(|| "-".to_string(), style::printable),
     ];
     if wide {
         row.extend([dbm(r.tx_power), dbm(r.min_rssi)]);

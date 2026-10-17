@@ -20,6 +20,18 @@ pub enum Paint {
 }
 
 impl Paint {
+    const ALL: [Self; 9] = [
+        Self::Green,
+        Self::Red,
+        Self::BoldRed,
+        Self::Yellow,
+        Self::Blue,
+        Self::BoldBlue,
+        Self::Cyan,
+        Self::Magenta,
+        Self::Dim,
+    ];
+
     fn sgr(self) -> &'static str {
         match self {
             Self::Green => "32",
@@ -35,13 +47,58 @@ impl Paint {
     }
 }
 
-/// `text` wrapped in `p`'s escape codes when `on`, unchanged otherwise.
+/// `text`, made [`printable`], wrapped in `p`'s escape codes when `on`.
 pub fn paint(text: &str, p: Paint, on: bool) -> String {
+    let text = printable(text);
     if on {
         format!("\x1b[{}m{text}\x1b[0m", p.sgr())
     } else {
-        text.to_string()
+        text
     }
+}
+
+/// `s` with control characters (C0, DEL, C1) replaced by U+FFFD. Names,
+/// SSIDs and log messages come from the network (a DHCP hostname, say); an
+/// escape sequence or newline in one must not reach the terminal. JSON
+/// escapes them itself.
+pub fn printable(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_control() { '\u{fffd}' } else { c })
+        .collect()
+}
+
+/// `s` [`printable`] except for whole spans [`paint`] writes (colour code,
+/// printable text, reset): a last line of defence for table cells that hold
+/// network text unpainted. A lone colour code is replaced like any other
+/// escape, so it cannot colour the rows after it.
+pub(crate) fn terminal_safe(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(c) = rest.chars().next() {
+        let len = match painted_span(rest) {
+            Some(len) => {
+                out.push_str(&rest[..len]);
+                len
+            }
+            None => {
+                out.push(if c.is_control() { '\u{fffd}' } else { c });
+                c.len_utf8()
+            }
+        };
+        rest = &rest[len..];
+    }
+    out
+}
+
+/// The length of the [`paint`] span `s` starts with, if any.
+fn painted_span(s: &str) -> Option<usize> {
+    const RESET: &str = "\x1b[0m";
+    let body = s.strip_prefix("\x1b[")?;
+    let (code, rest) = body.split_once('m')?;
+    Paint::ALL.iter().find(|p| p.sgr() == code)?;
+    let end = rest.find(RESET)?;
+    let text = &rest[..end];
+    (!text.chars().any(char::is_control)).then_some(2 + code.len() + 1 + end + RESET.len())
 }
 
 /// `text` green, yellow or red by `h`.
@@ -223,6 +280,37 @@ mod tests {
     fn paint_wraps_only_when_on() {
         assert_eq!(paint("up", Paint::Green, true), "\x1b[32mup\x1b[0m");
         assert_eq!(paint("up", Paint::Green, false), "up");
+    }
+
+    #[test]
+    fn paint_replaces_control_characters_first() {
+        assert_eq!(
+            paint("a\x1b]0;x\x07\nb", Paint::Blue, true),
+            "\x1b[34ma\u{fffd}]0;x\u{fffd}\u{fffd}b\x1b[0m"
+        );
+        assert_eq!(paint("a\u{9b}2Jb", Paint::Blue, false), "a\u{fffd}2Jb");
+    }
+
+    #[test]
+    fn terminal_safe_keeps_only_whole_painted_spans() {
+        let painted = format!(
+            "{} and {}",
+            paint("up", Paint::BoldRed, true),
+            paint("x", Paint::Dim, true)
+        );
+        assert_eq!(terminal_safe(&painted), painted);
+        assert_eq!(
+            terminal_safe("\x1b[8mx\x1b[2J\x1b]8;;u\x07\t\x1b[3"),
+            "\u{fffd}[8mx\u{fffd}[2J\u{fffd}]8;;u\u{fffd}\u{fffd}\u{fffd}[3"
+        );
+        // One of paint's own codes, but unbalanced or wrapping an escape.
+        assert_eq!(terminal_safe("\x1b[31m192.0.2.1"), "\u{fffd}[31m192.0.2.1");
+        assert_eq!(terminal_safe("\x1b[0mx"), "\u{fffd}[0mx");
+        assert_eq!(
+            terminal_safe("\x1b[31m\x1b[2J\x1b[0m"),
+            "\u{fffd}[31m\u{fffd}[2J\u{fffd}[0m"
+        );
+        assert_eq!(terminal_safe("café ✓"), "café ✓");
     }
 
     #[test]
