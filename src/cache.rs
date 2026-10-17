@@ -1,13 +1,16 @@
 //! Short-lived on-disk cache of raw controller responses, so a `list`
 //! followed by a few `get`s does not wait on the controller every time.
 //!
-//! One file per request URL under the cache directory. Entries are fresh for
-//! `ttl` after they were written (file mtime). Every failure is a cache miss:
-//! the cache only ever saves time, never fails a command.
+//! One file per key (the account and request URL) under the cache directory,
+//! named by the key's SHA-256. Entries are fresh for `ttl` after they were
+//! written (file mtime). Every failure is a cache miss: the cache only ever
+//! saves time, never fails a command.
 
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
+
+use sha2::{Digest, Sha256};
 
 pub struct Cache {
     dir: PathBuf,
@@ -59,18 +62,18 @@ impl Cache {
     }
 }
 
-/// Encodes `key` as a file name: `[A-Za-z0-9.-]` kept, every other byte
-/// (including `_` itself) becomes `_XX`, so distinct keys never collide.
+/// `key` as a file name: its SHA-256, so any key fits the filesystem's
+/// 255-byte name limit and distinct keys never collide.
 fn file_name(key: &str) -> String {
-    let mut out = String::with_capacity(key.len());
-    for b in key.bytes() {
-        if b.is_ascii_alphanumeric() || b == b'.' || b == b'-' {
-            out.push(b as char);
-        } else {
-            out.push_str(&format!("_{b:02x}"));
-        }
-    }
-    out
+    sha256_hex(key)
+}
+
+/// The SHA-256 of `s` in lowercase hex.
+pub fn sha256_hex(s: &str) -> String {
+    Sha256::digest(s.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 #[cfg(test)]
@@ -142,11 +145,17 @@ mod tests {
 
     #[test]
     fn file_names_are_safe_and_distinct() {
-        assert_eq!(
-            file_name("https://h:8443/a_b?x=1&y"),
-            "https_3a_2f_2fh_3a8443_2fa_5fb_3fx_3d1_26y"
-        );
+        let long = format!("https://h/{}", "a&".repeat(500));
+        for key in ["https://h:8443/a_b?x=1&y", long.as_str()] {
+            let name = file_name(key);
+            assert_eq!(name.len(), 64, "{name}");
+            assert!(name.bytes().all(|b| b.is_ascii_hexdigit()), "{name}");
+        }
         assert_ne!(file_name("a/b"), file_name("a_b"));
+        assert_eq!(
+            sha256_hex("abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 
     #[cfg(unix)]

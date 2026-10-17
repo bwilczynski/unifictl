@@ -15,10 +15,8 @@ use super::types::{
     ClientV2, Device, DpiEntry, DpiPage, Envelope, HealthSubsystem, LogQuery, NetworkConf, Site,
     Sta, SystemLogPage, TrafficReport, WanHistory, WlanConf,
 };
-use crate::cache::Cache;
-#[cfg(test)]
-use crate::config::Secret;
-use crate::config::{Auth, Config};
+use crate::cache::{Cache, sha256_hex};
+use crate::config::{Auth, Config, Secret};
 use crate::error::{Error, Result};
 
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -277,9 +275,10 @@ impl UnifiClient {
     /// GET `url`, from the cache when younger than `max_age` (default: the
     /// cache TTL).
     fn get_url<T: DeserializeOwned>(&self, url: &str, max_age: Option<Duration>) -> Result<T> {
+        let key = format!("{} {url}", self.account());
         let cached = self.cache.as_ref().and_then(|c| match max_age {
-            Some(age) => c.get_within(url, age),
-            None => c.get(url),
+            Some(age) => c.get_within(&key, age),
+            None => c.get(&key),
         });
         if let Some(value) = cached.and_then(|body| serde_json::from_str(&body).ok()) {
             return Ok(value);
@@ -288,9 +287,19 @@ impl UnifiClient {
         let value = serde_json::from_str(&body)
             .map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))?;
         if let Some(cache) = &self.cache {
-            cache.put(url, &body);
+            cache.put(&key, &body);
         }
         Ok(value)
+    }
+
+    /// Who is asking, for cache keys: what the controller returns depends on
+    /// the account. Never the API key itself, and never runs a command.
+    fn account(&self) -> String {
+        match &self.auth {
+            Auth::Session { username, .. } => format!("user:{username}"),
+            Auth::ApiKey(Secret::Literal(key)) => format!("key:{}", sha256_hex(key)),
+            Auth::ApiKey(Secret::Command(cmd)) => format!("command:{cmd}"),
+        }
     }
 
     /// Every entry of an Integration API list under `/v1/{path}`: the first
@@ -885,6 +894,54 @@ mod tests {
             .network_conf()
             .unwrap();
         login.assert_calls(1);
+    }
+
+    fn client_as(server: &MockServer, auth: Auth) -> UnifiClient {
+        UnifiClient::with_base_url(server.base_url(), auth, "lab".into(), false).unwrap()
+    }
+
+    #[test]
+    fn api_keys_do_not_share_cache_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/api/s/lab/stat/device");
+            then.status(200).json_body(json!({"data": []}));
+        });
+        for key in ["full", "limited", "full"] {
+            client_as(&server, Auth::ApiKey(Secret::Literal(key.into())))
+                .with_cache(cache_in(&dir, true))
+                .devices()
+                .unwrap();
+        }
+        m.assert_calls(2);
+    }
+
+    #[test]
+    fn session_users_do_not_share_cache_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = MockServer::start();
+        let login = server.mock(|when, then| {
+            when.method(POST).path("/api/login");
+            then.status(200).json_body(json!({}));
+        });
+        let m = server.mock(|when, then| {
+            when.method(GET).path("/api/s/lab/stat/device");
+            then.status(200).json_body(json!({"data": []}));
+        });
+        for username in ["admin", "viewer", "admin"] {
+            let auth = Auth::Session {
+                username: username.into(),
+                password: Secret::Literal("pw".into()),
+            };
+            client_as(&server, auth)
+                .with_cache(cache_in(&dir, true))
+                .devices()
+                .unwrap();
+        }
+        m.assert_calls(2);
+        login.assert_calls(2);
     }
 
     #[test]
