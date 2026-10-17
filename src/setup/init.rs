@@ -5,7 +5,7 @@ use std::path::Path;
 
 use super::prompt::Prompter;
 use crate::cli::InitArgs;
-use crate::config::{self, Auth, DEFAULT_SITE, FileConfig};
+use crate::config::{self, Auth, DEFAULT_SITE, FileConfig, Secret};
 use crate::error::{Error, Result};
 use crate::unifi::client::{TransportError, UnifiClient};
 
@@ -49,15 +49,21 @@ pub(crate) fn run_with(
             choose_site(&host, &auth, insecure_tls, scheme, p)?
         }
     };
-    let (api_key, username, password) = match auth {
-        Auth::ApiKey(key) => (Some(key), None, None),
-        Auth::Session { username, password } => (None, Some(username), Some(password)),
+    let split = |s: Secret| match s {
+        Secret::Literal(v) => (Some(v), None),
+        Secret::Command(c) => (None, Some(c)),
+    };
+    let ((api_key, api_key_command), username, (password, password_command)) = match auth {
+        Auth::ApiKey(key) => (split(key), None, (None, None)),
+        Auth::Session { username, password } => ((None, None), Some(username), split(password)),
     };
     let file = FileConfig {
         host: Some(host),
         api_key,
+        api_key_command,
         username,
         password,
+        password_command,
         site: Some(site),
         insecure_tls: insecure_tls.then_some(true),
         ..Default::default()
@@ -99,6 +105,25 @@ fn ask_nonempty(p: &mut dyn Prompter, label: &str) -> Result<String> {
     }
 }
 
+/// A password manager command, or else the secret itself, asked for as
+/// `label` and called `noun` in the command prompt.
+fn ask_command_or_secret(
+    p: &mut dyn Prompter,
+    label: &str,
+    noun: &str,
+    example: &str,
+) -> Result<Secret> {
+    let cmd = p.line(
+        &format!("{label} command, e.g. `{example}` (empty to type the {noun})"),
+        None,
+    )?;
+    if cmd.is_empty() {
+        ask_secret(p, label).map(Secret::Literal)
+    } else {
+        Ok(Secret::Command(cmd))
+    }
+}
+
 fn ask_secret(p: &mut dyn Prompter, label: &str) -> Result<String> {
     loop {
         let answer = p.read_secret(&format!("{label}: "))?;
@@ -108,46 +133,57 @@ fn ask_secret(p: &mut dyn Prompter, label: &str) -> Result<String> {
     }
 }
 
-/// `--api-key`/$UNIFI_API_KEY, else `--username` with `--password`/$UNIFI_PASSWORD,
-/// else ask.
+/// `--api-key`/`--api-key-command`/$UNIFI_API_KEY, else `--username` with
+/// `--password`/`--password-command`/$UNIFI_PASSWORD, else ask.
 fn collect_auth(
     args: &InitArgs,
     var: &dyn Fn(&str) -> Option<String>,
     p: &mut dyn Prompter,
 ) -> Result<Auth> {
     if let Some(key) = &args.api_key {
-        return Ok(Auth::ApiKey(key.clone()));
+        return Ok(Auth::ApiKey(Secret::Literal(key.clone())));
+    }
+    if let Some(cmd) = &args.api_key_command {
+        return Ok(Auth::ApiKey(Secret::Command(cmd.clone())));
     }
     // A typed --username wins over a key exported for something else.
     if args.username.is_none()
         && let Some(key) = var("UNIFI_API_KEY")
     {
         p.note("using UNIFI_API_KEY from the environment");
-        return Ok(Auth::ApiKey(key));
+        return Ok(Auth::ApiKey(Secret::Literal(key)));
     }
     let username = match &args.username {
         Some(u) => u.clone(),
         None => {
-            require(p, "auth", "--api-key or --username")?;
+            require(p, "auth", "--api-key, --api-key-command or --username")?;
             loop {
                 let choice = p.line(
                     "Auth method: [1] API key (UniFi OS: UCG, UDM, …)  [2] username/password",
                     Some("1"),
                 )?;
                 match choice.as_str() {
-                    "1" => return Ok(Auth::ApiKey(ask_secret(p, "API key")?)),
+                    "1" => {
+                        let key =
+                            ask_command_or_secret(p, "API key", "key", "pass show unifi/api-key")?;
+                        return Ok(Auth::ApiKey(key));
+                    }
                     "2" => break ask_nonempty(p, "Username")?,
                     _ => p.note("enter 1 or 2"),
                 }
             }
         }
     };
-    let password = match args.password.clone().or_else(|| var("UNIFI_PASSWORD")) {
-        Some(pw) => pw,
-        None => {
-            require(p, "password", "--password")?;
-            ask_secret(p, "Password")?
-        }
+    let password = match (&args.password_command, &args.password) {
+        (Some(cmd), _) => Secret::Command(cmd.clone()),
+        (None, Some(pw)) => Secret::Literal(pw.clone()),
+        (None, None) => match var("UNIFI_PASSWORD") {
+            Some(pw) => Secret::Literal(pw),
+            None => {
+                require(p, "password", "--password or --password-command")?;
+                ask_command_or_secret(p, "Password", "password", "pass show unifi/admin")?
+            }
+        },
     };
     Ok(Auth::Session { username, password })
 }
@@ -311,7 +347,12 @@ mod tests {
         let c = loaded(&target(&dir));
         assert_eq!(
             (c.host.as_str(), c.auth, c.site.as_str(), c.insecure_tls),
-            ("192.168.1.1", Auth::ApiKey("k".into()), "lab", true)
+            (
+                "192.168.1.1",
+                Auth::ApiKey(Secret::Literal("k".into())),
+                "lab",
+                true
+            )
         );
         assert!(p.prompts.is_empty());
         assert_eq!(p.notes, vec![format!("wrote {}", target(&dir).display())]);
@@ -367,7 +408,7 @@ mod tests {
             c.auth,
             Auth::Session {
                 username: "admin".into(),
-                password: "pw".into()
+                password: Secret::Literal("pw".into())
             }
         );
         assert_eq!(c.site, "default");
@@ -395,7 +436,10 @@ mod tests {
         let err = run(&args, &target(&dir), &no_env, &mut Script::new(false, &[]))
             .unwrap_err()
             .to_string();
-        assert!(err.contains("pass --api-key or --username"), "{err}");
+        assert!(
+            err.contains("pass --api-key, --api-key-command or --username"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -408,15 +452,16 @@ mod tests {
         );
         let host: &'static str = Box::leak(server.address().to_string().into_boxed_str());
         let dir = tempfile::tempdir().unwrap();
-        let mut p = Script::new(true, &["", host, "x", "1", "", "k", "9", "2"]);
+        let mut p = Script::new(true, &["", host, "x", "1", "", "", "k", "9", "2"]);
         run_with(&InitArgs::default(), &target(&dir), &no_env, &mut p, "http").unwrap();
         let c = loaded(&target(&dir));
         assert_eq!(
             (c.auth, c.site.as_str()),
-            (Auth::ApiKey("k".into()), "ab12")
+            (Auth::ApiKey(Secret::Literal("k".into())), "ab12")
         );
         assert!(!c.insecure_tls);
-        // empty host re-prompts; bad auth choice re-prompts; empty key re-prompts;
+        // empty host re-prompts; bad auth choice re-prompts; no command asks
+        // for the key; empty key re-prompts;
         // out-of-range site re-prompts; default site offered is [1] (default).
         assert_eq!(
             p.prompts
@@ -533,7 +578,7 @@ mod tests {
             loaded(&target(&dir)).auth,
             Auth::Session {
                 username: "admin".into(),
-                password: "pw".into()
+                password: Secret::Literal("pw".into())
             }
         );
     }
@@ -551,7 +596,7 @@ mod tests {
         run(&args, &target(&dir), &env, &mut p).unwrap();
         assert_eq!(
             loaded(&target(&dir)).auth,
-            Auth::ApiKey("envkey123456".into())
+            Auth::ApiKey(Secret::Literal("envkey123456".into()))
         );
         assert!(
             p.notes
@@ -559,6 +604,80 @@ mod tests {
                 .any(|n| n == "using UNIFI_API_KEY from the environment"),
             "{:?}",
             p.notes
+        );
+    }
+
+    #[test]
+    fn secret_commands_are_written_instead_of_secrets() {
+        let dir = tempfile::tempdir().unwrap();
+        let args = InitArgs {
+            host: Some("h".into()),
+            api_key_command: Some("pass show unifi/api-key".into()),
+            site: Some("default".into()),
+            no_check: true,
+            ..Default::default()
+        };
+        let env = |k: &str| (k == "UNIFI_API_KEY").then(|| "envkey123456".to_string());
+        run(&args, &target(&dir), &env, &mut Script::new(false, &[])).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(target(&dir)).unwrap(),
+            "host = \"h\"\napi_key_command = \"pass show unifi/api-key\"\nsite = \"default\"\n"
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let args = InitArgs {
+            host: Some("h".into()),
+            username: Some("admin".into()),
+            password_command: Some("pass show unifi/admin".into()),
+            no_check: true,
+            ..Default::default()
+        };
+        let env = |k: &str| (k == "UNIFI_PASSWORD").then(|| "pw".to_string());
+        run(&args, &target(&dir), &env, &mut Script::new(false, &[])).unwrap();
+        assert_eq!(
+            loaded(&target(&dir)).auth,
+            Auth::Session {
+                username: "admin".into(),
+                password: Secret::Command("pass show unifi/admin".into())
+            }
+        );
+    }
+
+    #[test]
+    fn interactive_asks_for_a_command_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let args = InitArgs {
+            host: Some("h".into()),
+            no_check: true,
+            ..Default::default()
+        };
+        let mut p = Script::new(true, &["1", "pass show unifi/api-key", ""]);
+        run(&args, &target(&dir), &no_env, &mut p).unwrap();
+        assert_eq!(
+            loaded(&target(&dir)).auth,
+            Auth::ApiKey(Secret::Command("pass show unifi/api-key".into()))
+        );
+        assert_eq!(
+            p.prompts[1],
+            "API key command, e.g. `pass show unifi/api-key` (empty to type the key): "
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut p = Script::new(true, &["2", "admin", "", "pw", ""]);
+        run(&args, &target(&dir), &no_env, &mut p).unwrap();
+        assert_eq!(
+            loaded(&target(&dir)).auth,
+            Auth::Session {
+                username: "admin".into(),
+                password: Secret::Literal("pw".into())
+            }
+        );
+        assert_eq!(
+            p.prompts[2..4],
+            [
+                "Password command, e.g. `pass show unifi/admin` (empty to type the password): ",
+                "Password: "
+            ]
         );
     }
 }

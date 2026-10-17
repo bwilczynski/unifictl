@@ -246,6 +246,12 @@ fn auth(cfg: &Config, scheme: &str) -> Result<(Check, Vec<Site>), Check> {
         .hint("a self-hosted Network application needs username and password instead of api_key")),
         Err(e @ AccessError::Login(_)) => Err(fail(&e.to_string())
             .hint("check username and password; UniFi OS consoles also accept an api_key")),
+        Err(e @ AccessError::Secret(_)) => {
+            let what = if api_key { "API key" } else { "password" };
+            Err(fail(&e.to_string()).hint(format!(
+                "run the command yourself: it must print the {what} on its first line"
+            )))
+        }
         Err(e) => Err(fail(&e.to_string())),
     }
 }
@@ -351,6 +357,32 @@ mod tests {
         assert_eq!(check(&r, "auth").detail, "API key rejected");
         assert_eq!(check(&r, "site").status, Skip);
         assert_eq!(check(&r, "site").detail, "skipped: auth failed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_secret_command_fails_auth_with_a_hint() {
+        let server = MockServer::start();
+        let dir = tempfile::tempdir().unwrap();
+        let p = write_cfg(
+            &dir,
+            &format!(
+                "host = \"{}\"\napi_key_command = \"exit 2\"\n",
+                server.address()
+            ),
+        );
+        let r = run_with(&p, false, &no_env, "http");
+        let auth = check(&r, "auth");
+        assert_eq!(auth.status, Fail);
+        assert_eq!(
+            auth.detail,
+            "api_key_command `exit 2`: exited with status 2"
+        );
+        assert_eq!(
+            auth.hint.as_deref(),
+            Some("run the command yourself: it must print the API key on its first line")
+        );
+        assert_eq!(check(&r, "site").status, Skip);
     }
 
     #[test]

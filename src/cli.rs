@@ -370,14 +370,22 @@ pub struct InitArgs {
     #[arg(long)]
     pub host: Option<String>,
     /// API key (UniFi OS); defaults to $UNIFI_API_KEY
-    #[arg(long, conflicts_with_all = ["username", "password"])]
+    #[arg(long, conflicts_with_all = ["api_key_command", "username", "password", "password_command"])]
     pub api_key: Option<String>,
+    /// Shell command printing the API key (e.g. `pass show unifi/api-key`),
+    /// stored instead of the key and run whenever unifictl contacts the controller
+    #[arg(long, value_name = "COMMAND", conflicts_with_all = ["username", "password", "password_command"])]
+    pub api_key_command: Option<String>,
     /// Username for a self-hosted Network application
     #[arg(long)]
     pub username: Option<String>,
     /// Password for --username; defaults to $UNIFI_PASSWORD
-    #[arg(long, requires = "username")]
+    #[arg(long, requires = "username", conflicts_with = "password_command")]
     pub password: Option<String>,
+    /// Shell command printing the password for --username (e.g. `pass show
+    /// unifi/admin`), stored instead of the password and run at login
+    #[arg(long, value_name = "COMMAND", requires = "username")]
+    pub password_command: Option<String>,
     /// Site name (default: picked from the controller's sites)
     #[arg(long)]
     pub site: Option<String>,

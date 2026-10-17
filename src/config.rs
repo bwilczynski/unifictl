@@ -14,9 +14,85 @@ const DEFAULT_CACHE_TTL_SECS: u64 = 15;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Auth {
     /// UniFi OS: X-API-KEY header, /proxy/network prefix.
-    ApiKey(String),
+    ApiKey(Secret),
     /// Legacy controller: cookie session via /api/login.
-    Session { username: String, password: String },
+    Session { username: String, password: Secret },
+}
+
+impl Auth {
+    /// The config key holding this mode's secret command, for messages.
+    pub fn command_key(&self) -> &'static str {
+        match self {
+            Self::ApiKey(_) => "api_key_command",
+            Self::Session { .. } => "password_command",
+        }
+    }
+}
+
+/// Where an API key or password comes from.
+#[derive(Clone, PartialEq, Eq)]
+pub enum Secret {
+    /// From the config file or the environment.
+    Literal(String),
+    /// Printed by this shell command (`api_key_command`, `password_command`),
+    /// e.g. a password manager's CLI. Run only when a request needs it.
+    Command(String),
+}
+
+/// Never shows a literal secret.
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Literal(_) => f.write_str("Literal(****)"),
+            Self::Command(c) => f.debug_tuple("Command").field(c).finish(),
+        }
+    }
+}
+
+impl Secret {
+    /// The secret: the literal, or the first line the command prints. The
+    /// command gets the terminal's stdin and stderr, so a password manager
+    /// can ask to be unlocked and its errors reach the user. `key` names the
+    /// command's config key in errors.
+    pub fn resolve(&self, key: &str) -> Result<String> {
+        let cmd = match self {
+            Self::Literal(s) => return Ok(s.clone()),
+            Self::Command(c) => c,
+        };
+        let fail = |m: String| Error::Auth(format!("{key} `{cmd}`: {m}"));
+        let out = shell(cmd)
+            .stdin(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .output()
+            .map_err(|e| fail(format!("cannot run: {e}")))?;
+        if !out.status.success() {
+            return Err(fail(match out.status.code() {
+                Some(code) => format!("exited with status {code}"),
+                None => "killed by a signal".into(),
+            }));
+        }
+        let text =
+            String::from_utf8(out.stdout).map_err(|_| fail("printed invalid UTF-8".into()))?;
+        let line = text.lines().next().unwrap_or_default();
+        if line.is_empty() {
+            return Err(fail("printed nothing".into()));
+        }
+        Ok(line.to_string())
+    }
+}
+
+#[cfg(unix)]
+fn shell(cmd: &str) -> std::process::Command {
+    let mut c = std::process::Command::new("sh");
+    c.arg("-c").arg(cmd);
+    c
+}
+
+#[cfg(not(unix))]
+fn shell(cmd: &str) -> std::process::Command {
+    let mut c = std::process::Command::new("cmd");
+    c.arg("/C").arg(cmd);
+    c
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,9 +123,13 @@ pub struct FileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_command: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub site: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -133,21 +213,46 @@ pub fn load(path: &Path, explicit: bool, env: &dyn Fn(&str) -> Option<String>) -
         return Err(missing("host", "UNIFI_HOST", path));
     }
 
-    let auth = match pick("UNIFI_API_KEY", file.api_key) {
+    let command = |c: Option<String>| c.filter(|c| !c.trim().is_empty());
+    let api_key_command = command(file.api_key_command);
+    let password_command = command(file.password_command);
+    let both = |literal: &str| {
+        Error::Config(format!(
+            "{}: set either {literal} or {literal}_command, not both",
+            path.display()
+        ))
+    };
+    if file.api_key.is_some() && api_key_command.is_some() {
+        return Err(both("api_key"));
+    }
+    if file.password.is_some() && password_command.is_some() {
+        return Err(both("password"));
+    }
+    let secret = |literal: Option<String>, command: Option<String>| {
+        literal
+            .map(Secret::Literal)
+            .or(command.map(Secret::Command))
+    };
+    let auth = match secret(pick("UNIFI_API_KEY", file.api_key), api_key_command) {
         Some(key) => Auth::ApiKey(key),
         None => match (
             pick("UNIFI_USERNAME", file.username),
-            pick("UNIFI_PASSWORD", file.password),
+            secret(pick("UNIFI_PASSWORD", file.password), password_command),
         ) {
             (Some(username), Some(password)) => Auth::Session { username, password },
             (None, None) => {
                 return Err(Error::Config(format!(
-                    "either api_key or username/password is required (set api_key in {} or UNIFI_API_KEY)",
+                    "either api_key or username/password is required (set api_key or api_key_command in {}, or UNIFI_API_KEY)",
                     path.display()
                 )));
             }
             (None, Some(_)) => return Err(missing("username", "UNIFI_USERNAME", path)),
-            (Some(_), None) => return Err(missing("password", "UNIFI_PASSWORD", path)),
+            (Some(_), None) => {
+                return Err(Error::Config(format!(
+                    "password is required (set password or password_command in {}, or UNIFI_PASSWORD)",
+                    path.display()
+                )));
+            }
         },
     };
 
@@ -358,7 +463,7 @@ mod tests {
             l.config,
             Config {
                 host: "192.168.1.1".into(),
-                auth: Auth::ApiKey("k".into()),
+                auth: Auth::ApiKey(Secret::Literal("k".into())),
                 site: "default".into(),
                 insecure_tls: false,
                 client_history_days: 30,
@@ -430,7 +535,7 @@ mod tests {
             c.auth,
             Auth::Session {
                 username: "u".into(),
-                password: "p".into()
+                password: Secret::Literal("p".into())
             }
         );
     }
@@ -467,9 +572,102 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(
-            err.contains("password is required") && err.contains("UNIFI_PASSWORD"),
+            err.contains("password is required")
+                && err.contains("password_command")
+                && err.contains("UNIFI_PASSWORD"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn secret_commands_are_kept_unrun() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = write_file(
+            &dir,
+            "host = \"h\"\napi_key_command = \"pass show unifi/api-key\"\n",
+        );
+        let auth = |env: &[(&str, &str)]| load(&p, false, &env_of(env)).unwrap().config.auth;
+        assert_eq!(
+            auth(&[]),
+            Auth::ApiKey(Secret::Command("pass show unifi/api-key".into()))
+        );
+        assert_eq!(
+            auth(&[("UNIFI_API_KEY", "k")]),
+            Auth::ApiKey(Secret::Literal("k".into()))
+        );
+
+        let p = write_file(
+            &dir,
+            "host = \"h\"\nusername = \"u\"\npassword_command = \"pass show unifi/u\"\n",
+        );
+        let auth = |env: &[(&str, &str)]| load(&p, false, &env_of(env)).unwrap().config.auth;
+        assert_eq!(
+            auth(&[]),
+            Auth::Session {
+                username: "u".into(),
+                password: Secret::Command("pass show unifi/u".into())
+            }
+        );
+        assert_eq!(
+            auth(&[("UNIFI_PASSWORD", "p")]),
+            Auth::Session {
+                username: "u".into(),
+                password: Secret::Literal("p".into())
+            }
+        );
+    }
+
+    #[test]
+    fn secret_and_its_command_conflict() {
+        let dir = tempfile::tempdir().unwrap();
+        for (body, key) in [
+            ("api_key = \"k\"\napi_key_command = \"c\"\n", "api_key"),
+            (
+                "username = \"u\"\npassword = \"p\"\npassword_command = \"c\"\n",
+                "password",
+            ),
+        ] {
+            let p = write_file(&dir, &format!("host = \"h\"\n{body}"));
+            let err = load(&p, false, &env_of(&[])).unwrap_err().to_string();
+            assert!(
+                err.ends_with(&format!("set either {key} or {key}_command, not both")),
+                "{err}"
+            );
+        }
+    }
+
+    #[test]
+    fn literal_secret_is_masked_in_debug() {
+        assert_eq!(
+            format!("{:?}", Secret::Literal("secret".into())),
+            "Literal(****)"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn secret_command_prints_the_first_line() {
+        let s = Secret::Command("printf 'hunter2\\nmore\\n'".into());
+        assert_eq!(s.resolve("password_command").unwrap(), "hunter2");
+        let s = Secret::Command("printf 'crlf\\r\\n'".into());
+        assert_eq!(s.resolve("password_command").unwrap(), "crlf");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn secret_command_failures_name_the_command() {
+        let e = Secret::Command("exit 3".into())
+            .resolve("api_key_command")
+            .unwrap_err();
+        assert!(matches!(e, Error::Auth(_)));
+        assert_eq!(
+            e.to_string(),
+            "api_key_command `exit 3`: exited with status 3"
+        );
+        let e = Secret::Command("true".into())
+            .resolve("api_key_command")
+            .unwrap_err();
+        assert_eq!(e.to_string(), "api_key_command `true`: printed nothing");
     }
 
     #[test]

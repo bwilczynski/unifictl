@@ -129,8 +129,10 @@ Path: `--config PATH` > `UNIFICTL_CONFIG` > `$XDG_CONFIG_HOME/unifictl/config.to
 ```toml
 host = "192.168.1.1"          # required; host[:port]; always https
 api_key = "…"                 # UniFi OS mode (preferred)
+# api_key_command = "pass show unifi/api-key"  # prints the key; instead of api_key
 # username = "admin"          # legacy controller mode, used only when api_key is absent
 # password = "…"
+# password_command = "pass show unifi/admin"   # prints the password; instead of password
 # site = "default"
 # insecure_tls = false        # skip TLS verification (self-signed controller certs)
 # client_history_days = 30    # offline-client window; <= 0 → 30
@@ -138,9 +140,19 @@ api_key = "…"                 # UniFi OS mode (preferred)
 
 - Env overrides file values: `UNIFI_HOST`, `UNIFI_API_KEY`, `UNIFI_USERNAME`,
   `UNIFI_PASSWORD`, `UNIFI_SITE`, `UNIFI_INSECURE_TLS`, `UNIFI_CLIENT_HISTORY_DAYS`.
+- `api_key_command` / `password_command` run through `sh -c` with the
+  terminal's stdin and stderr; the first line of stdout is the secret. The
+  command runs only when a request reaches the controller (never for a run
+  served from the response cache) and at most once per run, parallel requests
+  included; a failure is remembered for the run rather than retried. A
+  non-zero exit or empty output is an auth error naming the key and the
+  command, e.g. `api_key_command \`pass show unifi/api-key\`: exited with
+  status 2`. Setting a secret and its command together is a config error;
+  `UNIFI_API_KEY` / `UNIFI_PASSWORD` beat both. `api_key_command` selects
+  API-key mode just as `api_key` does.
 - A missing file is fine when env supplies everything.
-- Validation (same rules as homelab-api): `host` required; either `api_key` or both
-  `username` and `password`. Messages name the key and its env var, e.g.
+- Validation (same rules as homelab-api): `host` required; either `api_key` (or
+  `api_key_command`) or both `username` and `password` (or `password_command`). Messages name the key and its env var, e.g.
   `config: host is required (set host in <path> or UNIFI_HOST)`.
 - If the file is group/other-readable, warn on stderr and continue.
 

@@ -26,12 +26,14 @@ Success looks like:
 | Name of the check command | `config check` (grouped with `config init`), no top-level `doctor` |
 | Prompting | Hand-rolled line prompts on stdin/stderr; `rpassword` for hidden secrets |
 | Site selection in `init` | Connect, list the controller's sites, pick one; free-text fallback if that fails |
-| Secrets for scripted setup | `--api-key` / `--password` flags, falling back to `UNIFI_API_KEY` / `UNIFI_PASSWORD` |
+| Secrets for scripted setup | `--api-key` / `--password` flags, falling back to `UNIFI_API_KEY` / `UNIFI_PASSWORD`; `--api-key-command` / `--password-command` store a command instead |
 
 ## CLI
 
 ```
-unifictl config init [--host HOST] [--api-key KEY | --username USER [--password PASS]]
+unifictl config init [--host HOST]
+                     [--api-key KEY | --api-key-command CMD
+                      | --username USER [--password PASS | --password-command CMD]]
                      [--site SITE] [--insecure-tls] [--force] [--no-check]
 unifictl config check
 ```
@@ -42,7 +44,9 @@ location, resolved exactly as for every other command (`config::resolve_path`).
 report. `--refresh` is accepted (it is global) and ignored: neither command uses
 the response cache.
 
-`--api-key` conflicts with `--username` / `--password` (clap `conflicts_with`).
+`--api-key` and `--api-key-command` conflict with each other and with
+`--username` / `--password` / `--password-command`; `--password` conflicts
+with `--password-command` (clap `conflicts_with`).
 
 ## Behaviour
 
@@ -73,7 +77,7 @@ A `Fail` turns every later check that depends on it into `Skip` ("skipped:
 | 3 | dns | `<host> → <addr>, <addr>` | Fail: resolution error |
 | 4 | tcp | `connected to <addr>:<port>` (5 s timeout per address, first success wins) | Fail: refused / timed out, hint names the port |
 | 5 | tls | `certificate valid` | Fail: certificate error with hint `set insecure_tls = true (UniFi gateways ship self-signed certificates)`. Warn instead of Fail when `insecure_tls` is already on: `certificate not verified (insecure_tls = true)` |
-| 6 | auth | API key: `API key accepted`; session: `logged in as <user>` | Fail: 401/403 → `API key rejected` or `login failed (status N)`; for an API key against a 404 at `/proxy/network`, hint that the host may be a self-hosted Network application that needs username/password |
+| 6 | auth | API key: `API key accepted`; session: `logged in as <user>` | Fail: 401/403 → `API key rejected` or `login failed (status N)`; for an API key against a 404 at `/proxy/network`, hint that the host may be a self-hosted Network application that needs username/password; a failed `api_key_command` / `password_command` → its error, hint to run the command and check it prints the secret on its first line |
 | 7 | site | `site "<name>" found (<desc>)` | Fail: `site "<name>" not found`, hint `available: default (Default), lab (Lab)` |
 
 Dependencies: 2 needs a file; 3–7 need 1; each of 4–7 needs the step before
@@ -117,7 +121,11 @@ skip). It does not go through `app::main`'s `Error: …` path.
      `normalize_host`; re-prompt on error.
    - auth method: skipped if a flag/env decided it, otherwise
      `Auth method — [1] API key (UniFi OS: UCG, UDM, …)  [2] username/password [1]:`.
-   - API key or username + password: secrets read hidden via `rpassword`.
+   - API key or username + password: first
+     `API key command, e.g. \`pass show unifi/api-key\` (empty to type the key):`
+     (or `Password command, e.g. \`pass show unifi/admin\` (empty to type the password):`);
+     an empty answer reads the secret hidden via `rpassword`. A command is
+     written as `api_key_command` / `password_command`.
 3. Unless `--no-check`: probe TLS strictly. If it fails with a certificate
    error and `--insecure-tls` was not given, ask
    `Controller certificate is not trusted (<reason>). Accept it anyway (insecure_tls)? [y/N]`.
@@ -146,8 +154,8 @@ Prompts and progress go to stderr; stdout carries only the check report.
 - writes to a temp file in the same directory, created with mode `0600`
   (`OpenOptions::mode`), then renames over the target, so the file is never
   briefly world-readable and a crash leaves no partial config;
-- serializes only the keys that were set: `host`, `api_key` **or**
-  `username` + `password`, `site`, and `insecure_tls` only when true. Keys
+- serializes only the keys that were set: `host`, `api_key` (or
+  `api_key_command`) **or** `username` + `password` (or `password_command`), `site`, and `insecure_tls` only when true. Keys
   with defaults (`client_history_days`, `cache_ttl`) are left out.
 
 `FileConfig` derives `Serialize` with `skip_serializing_if = "Option::is_none"`.
