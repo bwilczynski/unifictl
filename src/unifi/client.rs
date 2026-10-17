@@ -16,6 +16,8 @@ use super::types::{
     Sta, SystemLogPage, TrafficReport, WanHistory, WlanConf,
 };
 use crate::cache::Cache;
+#[cfg(test)]
+use crate::config::Secret;
 use crate::config::{Auth, Config};
 use crate::error::{Error, Result};
 
@@ -36,6 +38,10 @@ pub struct UnifiClient {
     /// Session mode only: whether the cookie jar holds a live session. Locked
     /// for the duration of a login, so parallel reads share one login.
     logged_in: Mutex<bool>,
+    /// The API key or password once resolved, or why its command failed, so
+    /// a run asks a password manager at most once. Locked while the command
+    /// runs, so parallel requests share one run.
+    secret: Mutex<Option<std::result::Result<String, String>>>,
     cache: Option<Cache>,
     timeout: Duration,
 }
@@ -68,6 +74,8 @@ impl std::fmt::Display for TransportError {
 pub enum AccessError {
     Transport(TransportError),
     Login(u16),
+    /// `api_key_command` or `password_command` failed; the message names it.
+    Secret(String),
     Status(u16),
     Parse(String),
 }
@@ -77,6 +85,7 @@ impl std::fmt::Display for AccessError {
         match self {
             Self::Transport(e) => write!(f, "{e}"),
             Self::Login(code) => write!(f, "login failed (status {code})"),
+            Self::Secret(m) => write!(f, "{m}"),
             Self::Status(code) => write!(f, "status {code}"),
             Self::Parse(m) => write!(f, "unexpected response: {m}"),
         }
@@ -112,6 +121,7 @@ impl UnifiClient {
             site,
             http,
             logged_in: Mutex::new(false),
+            secret: Mutex::new(None),
             cache: None,
             timeout: TIMEOUT,
         })
@@ -144,14 +154,17 @@ impl UnifiClient {
     /// Uncached, and every failure is typed so callers can explain it.
     pub fn sites(&self) -> std::result::Result<Vec<Site>, AccessError> {
         let transport = |e: reqwest::Error| AccessError::Transport(classify(&e));
-        if let Auth::Session { username, password } = &self.auth {
-            let resp = self.post_login(username, password).map_err(transport)?;
+        let secret = self
+            .secret()
+            .map_err(|e| AccessError::Secret(e.to_string()))?;
+        if let Auth::Session { username, .. } = &self.auth {
+            let resp = self.post_login(username, &secret).map_err(transport)?;
             if resp.status() != StatusCode::OK {
                 return Err(AccessError::Login(resp.status().as_u16()));
             }
         }
         let url = format!("{}{}/api/self/sites", self.base_url, self.prefix());
-        let resp = self.request(&url).map_err(transport)?;
+        let resp = self.request(&url, self.key(&secret)).map_err(transport)?;
         if !resp.status().is_success() {
             return Err(AccessError::Status(resp.status().as_u16()));
         }
@@ -192,28 +205,53 @@ impl UnifiClient {
             .send()
     }
 
-    fn request(&self, url: &str) -> reqwest::Result<Response> {
+    /// The API key or password, running its command on first use only.
+    fn secret(&self) -> Result<String> {
+        let mut secret = self.secret.lock().unwrap_or_else(PoisonError::into_inner);
+        let resolved = secret.get_or_insert_with(|| {
+            let s = match &self.auth {
+                Auth::ApiKey(key) => key,
+                Auth::Session { password, .. } => password,
+            };
+            s.resolve(self.auth.command_key())
+                .map_err(|e| e.to_string())
+        });
+        resolved.clone().map_err(Error::Auth)
+    }
+
+    /// `secret` as the X-API-KEY header value, in API key mode only.
+    fn key<'a>(&self, secret: &'a str) -> Option<&'a str> {
+        matches!(self.auth, Auth::ApiKey(_)).then_some(secret)
+    }
+
+    fn request(&self, url: &str, key: Option<&str>) -> reqwest::Result<Response> {
         let mut req = self.http.get(url).timeout(self.timeout);
-        if let Auth::ApiKey(key) = &self.auth {
+        if let Some(key) = key {
             req = req.header("X-API-KEY", key);
         }
         req.send()
     }
 
-    fn post_request(&self, url: &str, body: &impl Serialize) -> reqwest::Result<Response> {
+    fn post_request(
+        &self,
+        url: &str,
+        key: Option<&str>,
+        body: &impl Serialize,
+    ) -> reqwest::Result<Response> {
         let mut req = self.http.post(url).json(body).timeout(self.timeout);
-        if let Auth::ApiKey(key) = &self.auth {
+        if let Some(key) = key {
             req = req.header("X-API-KEY", key);
         }
         req.send()
     }
 
     fn login(&self) -> Result<()> {
-        let Auth::Session { username, password } = &self.auth else {
+        let Auth::Session { username, .. } = &self.auth else {
             return Ok(());
         };
+        let password = self.secret()?;
         let resp = self
-            .post_login(username, password)
+            .post_login(username, &password)
             .map_err(|e| Error::Unifi(format!("unifi login: {}", describe(&e))))?;
         let status = resp.status();
         if status != StatusCode::OK {
@@ -288,17 +326,27 @@ impl UnifiClient {
 
     /// GET `url` and return the body; see [`Self::fetch_with`].
     fn fetch(&self, url: &str) -> Result<String> {
-        self.fetch_with(|| self.request(url))
+        self.fetch_with(|key| self.request(url, key))
     }
 
-    /// Sends a request with `send` and returns the body; in session mode
-    /// re-authenticates once on 401. Authentication failures are `Error::Auth`.
-    fn fetch_with(&self, send: impl Fn() -> reqwest::Result<Response>) -> Result<String> {
-        let send = || send().map_err(|e| Error::Unifi(format!("unifi request: {}", describe(&e))));
+    /// Sends a request with `send`, passing it the API key in API key mode,
+    /// and returns the body; in session mode re-authenticates once on 401.
+    /// Authentication failures are `Error::Auth`.
+    fn fetch_with(
+        &self,
+        send: impl Fn(Option<&str>) -> reqwest::Result<Response>,
+    ) -> Result<String> {
         let session = matches!(self.auth, Auth::Session { .. });
-        if session {
+        let key = if session {
             self.ensure_login(false)?;
-        }
+            None
+        } else {
+            Some(self.secret()?)
+        };
+        let send = || {
+            send(key.as_deref())
+                .map_err(|e| Error::Unifi(format!("unifi request: {}", describe(&e))))
+        };
         let mut resp = send()?;
         if resp.status() == StatusCode::UNAUTHORIZED {
             if !session {
@@ -376,7 +424,7 @@ impl UnifiApi for UnifiClient {
             self.prefix(),
             self.site
         );
-        let body = self.fetch_with(|| self.post_request(&url, query))?;
+        let body = self.fetch_with(|key| self.post_request(&url, key, query))?;
         serde_json::from_str(&body).map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))
     }
 
@@ -483,7 +531,7 @@ mod tests {
     fn api_key_client(server: &MockServer) -> UnifiClient {
         UnifiClient::with_base_url(
             server.base_url(),
-            Auth::ApiKey("k".into()),
+            Auth::ApiKey(Secret::Literal("k".into())),
             "default".into(),
             false,
         )
@@ -493,7 +541,7 @@ mod tests {
     fn session_client(server: &MockServer) -> UnifiClient {
         let auth = Auth::Session {
             username: "admin".into(),
-            password: "pw".into(),
+            password: Secret::Literal("pw".into()),
         };
         UnifiClient::with_base_url(server.base_url(), auth, "lab".into(), false).unwrap()
     }
@@ -760,7 +808,7 @@ mod tests {
     fn unreachable_controller_is_request_error() {
         let c = UnifiClient::with_base_url(
             "http://127.0.0.1:1".into(),
-            Auth::ApiKey("k".into()),
+            Auth::ApiKey(Secret::Literal("k".into())),
             "default".into(),
             false,
         )
@@ -857,6 +905,125 @@ mod tests {
         ]})
     }
 
+    /// A client whose API key or password is `key`, printed by a command that
+    /// appends a line to `runs` each time it runs.
+    #[cfg(unix)]
+    fn with_command(
+        server: &MockServer,
+        session: bool,
+        runs: &std::path::Path,
+        key: &str,
+    ) -> UnifiClient {
+        let cmd = Secret::Command(format!("echo x >> '{}'; echo {key}", runs.display()));
+        let auth = if session {
+            Auth::Session {
+                username: "admin".into(),
+                password: cmd,
+            }
+        } else {
+            Auth::ApiKey(cmd)
+        };
+        UnifiClient::with_base_url(server.base_url(), auth, "lab".into(), false).unwrap()
+    }
+
+    #[cfg(unix)]
+    fn run_count(runs: &std::path::Path) -> usize {
+        std::fs::read_to_string(runs).map_or(0, |s| s.lines().count())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn api_key_command_runs_once_for_parallel_reads() {
+        let server = MockServer::start();
+        let devices = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/api/s/lab/stat/device")
+                .header("X-API-KEY", "fromcmd");
+            then.status(200).json_body(json!({"data": []}));
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let runs = dir.path().join("runs");
+        let c = with_command(&server, false, &runs, "fromcmd");
+        std::thread::scope(|s| {
+            let reads: Vec<_> = (0..4).map(|_| s.spawn(|| c.devices())).collect();
+            for r in reads {
+                r.join().unwrap().unwrap();
+            }
+        });
+        devices.assert_calls(4);
+        assert_eq!(run_count(&runs), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn password_command_runs_once_across_relogins() {
+        let server = MockServer::start();
+        let login = server.mock(|when, then| {
+            when.method(POST)
+                .path("/api/login")
+                .json_body(json!({"username": "admin", "password": "fromcmd"}));
+            then.status(200).json_body(json!({}));
+        });
+        server.mock(|when, then| {
+            when.method(GET).path("/api/s/lab/stat/device");
+            then.status(401);
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let runs = dir.path().join("runs");
+        with_command(&server, true, &runs, "fromcmd")
+            .devices()
+            .unwrap_err();
+        login.assert_calls(2);
+        assert_eq!(run_count(&runs), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cached_reads_never_run_the_command() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/api/s/lab/stat/device");
+            then.status(200).json_body(json!({"data": []}));
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let runs = dir.path().join("runs");
+        with_command(&server, false, &runs, "k")
+            .with_cache(cache_in(&dir, true))
+            .devices()
+            .unwrap();
+        with_command(&server, false, &runs, "k")
+            .with_cache(cache_in(&dir, true))
+            .devices()
+            .unwrap();
+        assert_eq!(run_count(&runs), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_secret_command_stops_the_request() {
+        let server = MockServer::start();
+        let any = server.mock(|when, then| {
+            when.any_request();
+            then.status(200).json_body(json!({"data": []}));
+        });
+        let auth = Auth::ApiKey(Secret::Command("exit 1".into()));
+        let c = UnifiClient::with_base_url(server.base_url(), auth, "lab".into(), false).unwrap();
+        let e = c.devices().unwrap_err();
+        assert!(matches!(e, Error::Auth(_)), "{e:?}");
+        assert_eq!(
+            e.to_string(),
+            "api_key_command `exit 1`: exited with status 1"
+        );
+        assert_eq!(
+            c.sites(),
+            Err(AccessError::Secret(
+                "api_key_command `exit 1`: exited with status 1".into()
+            ))
+        );
+        any.assert_calls(0);
+    }
+
     #[test]
     fn sites_with_api_key() {
         let server = MockServer::start();
@@ -941,7 +1108,7 @@ mod tests {
         assert_eq!(api_key_client(&server).handshake(), Ok(()));
         let c = UnifiClient::with_base_url(
             "http://127.0.0.1:1".into(),
-            Auth::ApiKey("k".into()),
+            Auth::ApiKey(Secret::Literal("k".into())),
             "default".into(),
             false,
         )

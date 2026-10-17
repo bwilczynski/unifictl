@@ -38,18 +38,45 @@ cargo install --path .
 ## Configure
 
 Run the guided setup; it asks for the controller address, an API key (or
-username and password) and the site, writes the config file readable only by
-you, and checks that everything works:
+username and password, either one also as a command that prints it, see
+below) and the site, writes the config file readable only by you, and checks
+that everything works:
 
 ```
 unifictl config init
 ```
 
 For scripts, pass everything as flags (`--host`, `--api-key` or
-`--username`/`--password`, `--site`, `--insecure-tls`); secrets can come from
+`--api-key-command`, or `--username` with `--password` or
+`--password-command`, `--site`, `--insecure-tls`); secrets can come from
 `UNIFI_API_KEY` / `UNIFI_PASSWORD` instead, which keeps them out of shell
 history. `--force` overwrites an existing file; `--no-check` skips contacting
 the controller.
+
+### Secrets from a password manager
+
+To keep the API key or password out of the config file, set
+`api_key_command` instead of `api_key`, or `password_command` instead of
+`password`: a shell command that prints the secret on its first line. For
+[pass](https://www.passwordstore.org/):
+
+```toml
+api_key_command = "pass show unifi/api-key"
+```
+
+unifictl runs the command at most once per run, and only when it has to
+contact the controller: a run answered from the response cache never runs it.
+unifictl keeps no session between runs, so most runs do contact the
+controller; use a password manager that stays unlocked through an agent
+(gpg-agent for pass, `rbw`). The command shares your terminal, so it can ask
+to be unlocked; if gpg-agent asks for the passphrase with a terminal
+pinentry, export `GPG_TTY=$(tty)` in your shell.
+
+pass keeps the secret on an entry's first line, so any lines after it (a
+username, notes) are ignored. `rbw get unifi`, `bw get password unifi`
+(needs `BW_SESSION`), `op read op://…` and `secret-tool lookup service unifi`
+work the same way. `UNIFI_API_KEY` / `UNIFI_PASSWORD` still take precedence
+over either key.
 
 When something stops working, `unifictl config check` walks through the
 config, file permissions, DNS, TCP, TLS, authentication and site, and says
@@ -62,8 +89,10 @@ The file lives at `~/.config/unifictl/config.toml` (or
 ```toml
 host = "192.168.1.1"      # host[:port]; always https
 api_key = "…"             # UniFi OS (UCG, UDM, …): Settings → Control Plane → Integrations
+# api_key_command = "pass show unifi/api-key"   # prints the key; instead of api_key
 # username = "admin"      # self-hosted Network application instead of api_key
 # password = "…"
+# password_command = "pass show unifi/admin"    # prints the password; instead of password
 # site = "default"
 # insecure_tls = true     # UniFi gateways ship self-signed certificates
 # client_history_days = 30
