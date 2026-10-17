@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/bwilczynski/unifictl/compare/v0.3.6...v0.4.0) - 2026-10-17
+
+### Added
+
+- [**breaking**] filter clients and devices lists, show online clients by default
+
 ## [0.3.6](https://github.com/bwilczynski/unifictl/compare/v0.3.5...v0.3.6) - 2026-10-17
 
 ### Fixed
