@@ -68,11 +68,36 @@ fn lenient_string<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::
 }
 
 /// `{"meta": {...}, "data": [...]}` wrapper used by the /api/s/{site} endpoints.
+/// Read `data` through [`Envelope::into_data`], which rejects API errors.
 #[derive(Debug, Deserialize)]
 #[serde(bound(deserialize = "T: Deserialize<'de> + Default"))]
 pub struct Envelope<T: Default> {
     #[serde(default, deserialize_with = "nd")]
-    pub data: T,
+    meta: Meta,
+    #[serde(default, deserialize_with = "nd")]
+    data: T,
+}
+
+/// The controller's verdict on a request: `rc` is `ok` or `error`, and an
+/// error carries a message such as `api.err.NoPermission`.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct Meta {
+    #[serde(deserialize_with = "nd")]
+    rc: String,
+    #[serde(deserialize_with = "lenient_string")]
+    msg: Option<String>,
+}
+
+impl<T: Default> Envelope<T> {
+    /// `data`, or the controller's message when it reported an error (an
+    /// HTTP 200 can still carry one).
+    pub fn into_data(self) -> Result<T, String> {
+        if self.meta.rc == "error" {
+            return Err(self.meta.msg.unwrap_or_else(|| "unknown error".into()));
+        }
+        Ok(self.data)
+    }
 }
 
 /// One entry of `/api/self/sites`: `name` is the short ID used in URLs and
@@ -668,6 +693,28 @@ pub struct WanDowntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn envelope_rejects_api_errors() {
+        let env: Envelope<Vec<Device>> = serde_json::from_str(
+            r#"{"meta":{"rc":"error","msg":"api.err.NoPermission"},"data":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(env.into_data().unwrap_err(), "api.err.NoPermission");
+
+        let env: Envelope<Vec<Device>> =
+            serde_json::from_str(r#"{"meta":{"rc":"error"}}"#).unwrap();
+        assert_eq!(env.into_data().unwrap_err(), "unknown error");
+
+        for body in [
+            r#"{"meta":{"rc":"ok"},"data":[{"name":"x"}]}"#,
+            r#"{"meta":null,"data":[{"name":"x"}]}"#,
+            r#"{"data":[{"name":"x"}]}"#,
+        ] {
+            let env: Envelope<Vec<Device>> = serde_json::from_str(body).unwrap();
+            assert_eq!(env.into_data().unwrap()[0].name, "x", "{body}");
+        }
+    }
 
     #[test]
     fn null_fields_decode_to_defaults() {

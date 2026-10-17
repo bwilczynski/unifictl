@@ -76,6 +76,8 @@ pub enum AccessError {
     Secret(String),
     Status(u16),
     Parse(String),
+    /// The controller answered with an API error such as `api.err.NoPermission`.
+    Api(String),
 }
 
 impl std::fmt::Display for AccessError {
@@ -86,6 +88,7 @@ impl std::fmt::Display for AccessError {
             Self::Secret(m) => write!(f, "{m}"),
             Self::Status(code) => write!(f, "status {code}"),
             Self::Parse(m) => write!(f, "unexpected response: {m}"),
+            Self::Api(m) => write!(f, "controller error: {m}"),
         }
     }
 }
@@ -168,8 +171,9 @@ impl UnifiClient {
         }
         let body = resp.text().map_err(transport)?;
         serde_json::from_str::<Envelope<Vec<Site>>>(&body)
-            .map(|env| env.data)
-            .map_err(|e| AccessError::Parse(e.to_string()))
+            .map_err(|e| AccessError::Parse(e.to_string()))?
+            .into_data()
+            .map_err(AccessError::Api)
     }
 
     /// UniFi OS proxies the Network app at /proxy/network; legacy controllers
@@ -275,17 +279,30 @@ impl UnifiClient {
     /// GET `url`, from the cache when younger than `max_age` (default: the
     /// cache TTL).
     fn get_url<T: DeserializeOwned>(&self, url: &str, max_age: Option<Duration>) -> Result<T> {
+        self.get_url_with(url, max_age, Ok)
+    }
+
+    /// [`Self::get_url`], passing the parsed body through `accept`; only
+    /// accepted responses are cached.
+    fn get_url_with<R: DeserializeOwned, T>(
+        &self,
+        url: &str,
+        max_age: Option<Duration>,
+        accept: impl Fn(R) -> Result<T>,
+    ) -> Result<T> {
         let key = format!("{} {url}", self.account());
         let cached = self.cache.as_ref().and_then(|c| match max_age {
             Some(age) => c.get_within(&key, age),
             None => c.get(&key),
         });
         if let Some(value) = cached.and_then(|body| serde_json::from_str(&body).ok()) {
-            return Ok(value);
+            return accept(value);
         }
         let body = self.fetch(url)?;
-        let value = serde_json::from_str(&body)
-            .map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))?;
+        let value = accept(
+            serde_json::from_str(&body)
+                .map_err(|e| Error::Unifi(format!("unifi parse response: {e}")))?,
+        )?;
         if let Some(cache) = &self.cache {
             cache.put(&key, &body);
         }
@@ -385,8 +402,16 @@ impl UnifiClient {
     }
 
     fn get_data<T: DeserializeOwned + Default>(&self, endpoint: &str) -> Result<T> {
-        let env: Envelope<T> = self.get(&format!("/api/s/{}/{endpoint}", self.site))?;
-        Ok(env.data)
+        let url = format!(
+            "{}{}/api/s/{}/{endpoint}",
+            self.base_url,
+            self.prefix(),
+            self.site
+        );
+        self.get_url_with(&url, None, |env: Envelope<T>| {
+            env.into_data()
+                .map_err(|msg| Error::Unifi(format!("unifi api error: {msg}")))
+        })
     }
 }
 
@@ -874,6 +899,25 @@ mod tests {
     }
 
     #[test]
+    fn api_errors_fail_and_are_not_cached() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/api/s/default/stat/device");
+            then.status(200).json_body(
+                json!({"meta": {"rc": "error", "msg": "api.err.NoPermission"}, "data": []}),
+            );
+        });
+        let c = api_key_client(&server).with_cache(cache_in(&dir, true));
+        for _ in 0..2 {
+            let err = c.devices().unwrap_err().to_string();
+            assert_eq!(err, "unifi api error: api.err.NoPermission");
+        }
+        m.assert_calls(2);
+    }
+
+    #[test]
     fn session_cache_hit_skips_login() {
         let dir = tempfile::tempdir().unwrap();
         let server = MockServer::start();
@@ -1157,6 +1201,17 @@ mod tests {
             api_key_client(&server).sites(),
             Err(AccessError::Parse(_))
         ));
+
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(GET).path("/proxy/network/api/self/sites");
+            then.status(200)
+                .json_body(json!({"meta": {"rc": "error", "msg": "api.err.NoPermission"}}));
+        });
+        assert_eq!(
+            api_key_client(&server).sites(),
+            Err(AccessError::Api("api.err.NoPermission".into()))
+        );
     }
 
     #[test]
