@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5](https://github.com/bwilczynski/unifictl/compare/v0.3.4...v0.3.5) - 2026-10-17
+
+### Added
+
+- read the API key and password from a command
+
+### Fixed
+
+- key the response cache by account
+
 ## [0.3.4](https://github.com/bwilczynski/unifictl/compare/v0.3.3...v0.3.4) - 2026-10-14
 
 ### Added
