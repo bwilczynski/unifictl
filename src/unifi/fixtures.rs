@@ -83,7 +83,8 @@ fn read<T: DeserializeOwned>(dir: &Path, name: &str) -> Result<Vec<T>> {
         .map_err(|e| Error::Other(format!("fixture {}: {e}", path.display())))?;
     let env: Envelope<Vec<T>> = serde_json::from_str(&text)
         .map_err(|e| Error::Other(format!("fixture {}: {e}", path.display())))?;
-    Ok(env.data)
+    env.into_data()
+        .map_err(|msg| Error::Other(format!("fixture {}: {msg}", path.display())))
 }
 
 fn read_optional<T: DeserializeOwned>(dir: &Path, name: &str) -> Result<Vec<T>> {
