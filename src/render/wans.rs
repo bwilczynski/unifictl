@@ -6,10 +6,22 @@ use jiff::tz::TimeZone;
 use super::Table;
 use super::format::{format_period, format_uptime};
 use super::style;
-use crate::model::{Wan, WanDetail, WanList, WanOutages};
+use crate::model::{AVAILABILITY_WINDOW_SECONDS, Wan, WanDetail, WanList, WanOutages};
 
 fn uptime(w: &Wan) -> String {
     w.uptime.map_or_else(|| "-".to_string(), format_uptime)
+}
+
+/// The percentage alone over the usual 24h; any other period is named, so
+/// a figure over the seconds since a reconnect can't pass for a day's.
+fn list_availability(w: &Wan, color: bool) -> String {
+    let mut s = style::availability(w.availability, color);
+    if let (Some(_), Some(p)) = (w.availability, w.availability_period)
+        && p != AVAILABILITY_WINDOW_SECONDS
+    {
+        s.push_str(&format!(" ({})", format_period(p)));
+    }
+    s
 }
 
 pub fn list(list: &WanList, wide: bool, color: bool) -> String {
@@ -26,7 +38,7 @@ pub fn list(list: &WanList, wide: bool, color: bool) -> String {
             style::printable(&w.ip_address),
             uptime(w),
             style::wan_status(w.status, color),
-            style::availability(w.availability, color),
+            list_availability(w, color),
         ];
         if wide {
             row.push(style::latency(w.latency, color));
@@ -152,6 +164,18 @@ mod tests {
         assert!(lines[2].contains(" -  "), "down WAN has no uptime: {out}");
         assert!(lines[2].ends_with("-"));
         assert!(!out.contains("LATENCY"));
+    }
+
+    #[test]
+    fn list_names_a_period_other_than_a_day() {
+        let mut w = up("a");
+        w.availability = Some(100.0);
+        w.availability_period = Some(58);
+        let out = list(&WanList { items: vec![w] }, false, false);
+        assert!(
+            out.lines().nth(1).unwrap().ends_with("100.00% (58s)"),
+            "{out}"
+        );
     }
 
     #[test]

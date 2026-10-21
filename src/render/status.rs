@@ -218,7 +218,7 @@ mod tests {
     fn fixture_table() {
         // Detail lines start under the summary column: 9 + 6 spaces.
         let want = [
-            "WAN      ok    Internet 1  up 1h 10m 53s  100.00% over 1h 11m 10s  13 ms",
+            "WAN      ok    Internet 1  up 1h 10m 53s  99.95% over 24h  13 ms",
             "WAN      idle  Internet 2  not connected since boot",
             "DEVICES  ok    7 online",
             "WI-FI    warn  2 APs, 2 clients",

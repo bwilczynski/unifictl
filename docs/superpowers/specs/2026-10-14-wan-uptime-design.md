@@ -24,11 +24,11 @@ Success looks like:
 
 | Question | Decision |
 |---|---|
-| Source | The gateway's `uptime_stats` in `stat/device`, which `wans` already fetches. No new requests |
+| Source | The gateway's `uptime_stats` in `stat/device`, which `wans` already fetches; availability from a 24h WAN history request (revised 2026-10-20, see AVAILABILITY) |
 | UPTIME | `uptime_stats[group].uptime` while connected; `-` while disconnected |
 | Without `uptime_stats` | UPTIME, AVAILABILITY, LATENCY print `-`. Gateway uptime is never used as a fallback |
 | Disconnected WAN | `downtime` (seconds) from `uptime_stats[group].downtime`, shown by `wans get` and in JSON |
-| AVAILABILITY | `uptime_stats[group].availability` over `time_period`, two decimals: `99.93%`; JSON keeps the controller's full value |
+| AVAILABILITY | The last 24h from `aggregated-dashboard` `wan_history` (`wan_history_details[].uptime`), two decimals: `99.93%`; JSON keeps the controller's full value. Without that history, `uptime_stats[group].availability` over `time_period`, and `list` names the period: `100.00% (58s)`. (Revised 2026-10-20: `time_period` restarts when the WAN reconnects, so `uptime_stats` alone read 100% minutes after an outage.) |
 | Availability colour | On the displayed value: ≥ 99.9% green, 99–99.9% yellow, < 99% red |
 | LATENCY | `uptime_stats[group].latency_average`, ms; `--wide` only in `list`, always in `get` |
 | Latency colour | < 50 ms green, 50–99 yellow, ≥ 100 red |

@@ -135,7 +135,8 @@ on that access point right now.
 
 `devices list` and `clients list` show an EXPERIENCE column (UniFi's score)
 for spotting trouble quickly; `wans list` shows each WAN's own uptime and its
-availability over the last 24 hours. `--wide` on any list adds more columns,
+availability over the last 24 hours (with its period, such as `(58s)`, when
+the controller's WAN history can't be read). `--wide` on any list adds more columns,
 such as MAC, uplink, signal, link speed, live traffic and WAN latency.
 
 `wans get` also lists the WAN's outages over the last 7 days, with start, end
@@ -166,7 +167,7 @@ verdict, and the culprits named below the line:
 
 ```sh
 $ unifictl status
-WAN      ok     Internet 1  up 3d 4h 0m 0s  99.98% over 3d 4h  11 ms
+WAN      ok     Internet 1  up 3d 4h 0m 0s  99.98% over 24h  11 ms
 WAN      idle   Internet 2  not connected since boot
 DEVICES  error  8 of 9 online
                 offline: ap-garage
