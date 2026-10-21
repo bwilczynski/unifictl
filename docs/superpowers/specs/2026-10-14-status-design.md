@@ -23,7 +23,7 @@ Success looks like:
 
 ```
 $ unifictl status
-WAN      ok     Internet 1  up 3d 4h 0m 0s  99.80% over 3d 4h  12 ms
+WAN      ok     Internet 1  up 3d 4h 0m 0s  99.80% over 24h  12 ms
                 1 outage in 24h (latest 4m 10s at 03:12)
 WAN      error  Internet 2  down 12m 0s
 DEVICES  error  8 of 9 online
@@ -41,7 +41,7 @@ A healthy network:
 
 ```
 $ unifictl status
-WAN      ok     Internet 1  up 3d 4h 0m 0s  99.98% over 3d 4h  11 ms
+WAN      ok     Internet 1  up 3d 4h 0m 0s  99.98% over 24h  11 ms
 WAN      idle   Internet 2  not connected since boot
 DEVICES  ok     9 online
 WI-FI    ok     4 APs, 38 clients
@@ -68,7 +68,7 @@ commands.
 | Updates | `upgradable` / `upgrade_to_firmware` from `stat/device`; informational, never a problem |
 | Exit code | 1 if any row is `error`, otherwise 0; same for `-o json` |
 | Idle WAN | A disconnected WAN that has been down since the gateway booted (downtime within 5 minutes of the gateway's uptime, or no downtime reported) is `idle`, not `error`: a configured but unplugged backup WAN must not keep `status` red |
-| WAN availability | The gateway's live figure over its own period (`uptime_stats.time_period`), shown as `99.80% over 3d 4h`, as in `wans list`; not a 24h figure |
+| WAN availability | The 24h `wan_history` figure, shown as `99.80% over 24h`, as in `wans list`. Falls back to the gateway's live figure over its own period when the history can't be read. (Revised 2026-10-20: the live period restarts when the WAN reconnects, so right after an outage it read `100.00% over 58s`.) |
 | `-o ids` | Rejected like on other commands without IDs |
 | Detail lists | At most 5 names, then `+N more` |
 | `vpn` subsystem | Ignored: it reports `unknown` when no VPN is configured |

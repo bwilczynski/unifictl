@@ -22,6 +22,10 @@ use crate::unifi::types::{
 /// The window for outages and alarms: the last 24 hours.
 pub const STATUS_WINDOW_SECONDS: i64 = 24 * 60 * 60;
 
+// The WAN history read for outages also gives availability, which
+// `build_wan` labels as `AVAILABILITY_WINDOW_SECONDS`.
+const _: () = assert!(STATUS_WINDOW_SECONDS == crate::model::AVAILABILITY_WINDOW_SECONDS);
+
 /// A WAN down for at least the gateway's uptime minus this has been down
 /// since boot: an unplugged backup rather than an outage.
 const SINCE_BOOT_SLACK_SECONDS: i64 = 300;
@@ -114,7 +118,7 @@ fn wan_rows(
         .iter()
         .filter(|n| n.purpose == "wan")
         .map(|n| {
-            let wan = build_wan(n, gw);
+            let wan = build_wan(n, gw, history);
             let outages_24h: Vec<WanOutage> = history
                 .and_then(|h| outages(h, &n.wan_networkgroup, tz))
                 .map(|o| {
@@ -463,6 +467,29 @@ mod tests {
         };
         assert_eq!(outages_24h.len(), 1);
         assert_eq!(outages_24h[0].start_ms, NOW - 3_600_000);
+    }
+
+    #[test]
+    fn availability_after_a_reconnect_covers_the_day() {
+        let mut api = fixtures();
+        let stats = gateway(&mut api).uptime_stats.get_mut("WAN").unwrap();
+        stats.availability = Some(100.0);
+        stats.time_period = Some(58);
+        api.wan_history
+            .as_mut()
+            .unwrap()
+            .wan_history
+            .as_mut()
+            .unwrap()
+            .wan_history_details[0]
+            .uptime = Some(99.82);
+        let s = status(api);
+        let StatusArea::Wan { wan, .. } = &s.rows[0].area else {
+            panic!()
+        };
+        assert_eq!(wan.availability, Some(99.82));
+        assert_eq!(wan.availability_period, Some(86400));
+        assert_eq!(s.rows[0].verdict, Verdict::Warn, "99.82% is below 99.9%");
     }
 
     #[test]

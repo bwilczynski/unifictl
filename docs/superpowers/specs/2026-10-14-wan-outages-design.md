@@ -28,7 +28,7 @@ Success looks like:
 | Window shown | The controller's own window from `dashboard_meta.start_timestamp`, never the requested one |
 | Availability | `wan_history_details[].uptime` (percent over the window), graded like AVAILABILITY |
 | Outage end | `timestamp + downtime_in_seconds` |
-| Existing AVAILABILITY row | Unchanged: the gateway's live `uptime_stats` figure and its period |
+| Existing AVAILABILITY row | Unchanged: the gateway's live `uptime_stats` figure and its period. (Revised 2026-10-20: now the last 24h from a second, 24h history request; see the wan-uptime spec.) |
 | Endpoint fails or no `wan_history` | Outage section left out; the rest of `wans get` prints as today |
 | WAN without a history entry | Same as above (a WAN never up, e.g. unplugged WAN2, has none) |
 | JSON timestamps | RFC 3339 in the local offset, like `logs` |

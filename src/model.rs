@@ -542,6 +542,10 @@ pub struct WanList {
     pub items: Vec<Wan>,
 }
 
+/// The window `Wan::availability` covers when the controller has the
+/// history for it: the last 24 hours.
+pub const AVAILABILITY_WINDOW_SECONDS: i64 = 24 * 60 * 60;
+
 /// A WAN, the same in `wans list` and `wans get`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -556,7 +560,8 @@ pub struct Wan {
     pub downtime: Option<i64>,
     /// Percent over `availability_period`.
     pub availability: Option<f64>,
-    /// Seconds.
+    /// Seconds: `AVAILABILITY_WINDOW_SECONDS` from the WAN history, or the
+    /// gateway's live period when the history cannot be read.
     pub availability_period: Option<i64>,
     /// Average latency in milliseconds over `availability_period`.
     pub latency: Option<i64>,
