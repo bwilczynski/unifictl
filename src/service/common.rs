@@ -198,6 +198,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn normalize_mac_only_lowercases() {
+        // Shared by logs, whose parameter ids are not always MACs.
+        assert_eq!(normalize_mac("68:EE:EE:00:00:02"), "68:ee:ee:00:00:02");
+        assert_eq!(normalize_mac("admin-1"), "admin-1");
+    }
+
+    #[test]
     fn to_kebab_matches_go() {
         for (input, want) in [
             ("USG 3P", "usg-3p"),

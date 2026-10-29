@@ -15,10 +15,19 @@ pub struct ClientFilter {
     pub device_id: Option<String>,
     /// As `ssids list` shows it; only wireless clients match.
     pub ssid_id: Option<String>,
+    /// This machine's MACs, any case or separator; only those clients match.
+    pub self_macs: Option<Vec<String>>,
 }
 
 impl ClientFilter {
     fn matches(&self, c: &NetworkClient) -> bool {
+        if self.self_macs.as_ref().is_some_and(|macs| {
+            !macs
+                .iter()
+                .any(|m| normalize_mac(&m.replace('-', ":")) == c.mac)
+        }) {
+            return false;
+        }
         if self.connection.is_some_and(|t| c.connection_type != t) {
             return false;
         }
@@ -47,13 +56,16 @@ impl Service {
             Some(ClientStatus::Offline) => self.api.offline_clients(self.history_days)?,
             None => self.api.all_clients(self.history_days)?,
         };
-        Ok(NetworkClientList {
-            items: raw
-                .iter()
-                .map(network_client)
-                .filter(|c| filter.matches(c))
-                .collect(),
-        })
+        let mut items: Vec<_> = raw
+            .iter()
+            .map(network_client)
+            .filter(|c| filter.matches(c))
+            .collect();
+        if filter.self_macs.is_some() {
+            // Docked with Wi-Fi still on: the wired connection first.
+            items.sort_by_key(|c| c.connection_type != ConnectionType::Wired);
+        }
+        Ok(NetworkClientList { items })
     }
 
     /// The `clients list` item with this ID (active first, then history).
@@ -335,5 +347,56 @@ mod tests {
         let off =
             serde_json::to_value(svc(fixtures()).get_client("host-02-bb05").unwrap()).unwrap();
         assert!(off.get("traffic").is_none() && off.get("uptime").is_none());
+    }
+
+    fn self_filter(macs: &[&str]) -> ClientFilter {
+        ClientFilter {
+            self_macs: Some(macs.iter().map(|m| m.to_string()).collect()),
+            ..Default::default()
+        }
+    }
+
+    fn ids(s: &Service, f: &ClientFilter) -> Vec<String> {
+        s.list_clients(f)
+            .unwrap()
+            .items
+            .into_iter()
+            .map(|c| c.id)
+            .collect()
+    }
+
+    #[test]
+    fn self_lists_wired_before_wireless() {
+        // MacBook Pro (wireless) comes first in the fixtures, nas-1 (wired) second.
+        let s = svc(fixtures());
+        assert_eq!(
+            ids(
+                &s,
+                &self_filter(&["3c:ee:ee:00:00:01", "68:ee:ee:00:00:02"])
+            ),
+            ["nas-1-0002", "macbook-pro-0001"]
+        );
+    }
+
+    #[test]
+    fn self_matches_any_mac_spelling() {
+        let s = svc(fixtures());
+        assert_eq!(
+            ids(&s, &self_filter(&["68-EE-EE-00-00-02"])),
+            ["nas-1-0002"]
+        );
+    }
+
+    #[test]
+    fn self_with_no_match_is_empty() {
+        let s = svc(fixtures());
+        assert!(ids(&s, &self_filter(&["02:00:00:00:00:99"])).is_empty());
+        assert!(ids(&s, &self_filter(&[])).is_empty());
+    }
+
+    #[test]
+    fn self_does_not_match_a_shared_suffix() {
+        // Same last four hex digits as nas-1 (68:ee:ee:00:00:02).
+        assert!(ids(&svc(fixtures()), &self_filter(&["02:00:00:00:00:02"])).is_empty());
     }
 }

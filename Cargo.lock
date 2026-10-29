@@ -2104,6 +2104,7 @@ dependencies = [
  "clap_complete",
  "httpmock",
  "jiff",
+ "libc",
  "reqwest",
  "rpassword",
  "serde",
