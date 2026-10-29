@@ -8,8 +8,8 @@ use std::thread::ScopedJoinHandle;
 
 use crate::error::Result;
 use types::{
-    ClientV2, Device, DpiEntry, HealthSubsystem, LogQuery, NetworkConf, Sta, SystemLogPage,
-    TrafficReport, WanHistory, WlanConf,
+    ClientV2, ConsoleSystem, Device, DpiEntry, HealthSubsystem, LogQuery, NetworkConf, Sta,
+    SysInfo, SystemLogPage, TrafficReport, WanHistory, WlanConf,
 };
 
 /// Runs independent controller reads concurrently, so a command waits for
@@ -50,6 +50,12 @@ pub trait UnifiApi: Sync {
     fn network_conf(&self) -> Result<Vec<NetworkConf>>;
     /// Per-subsystem health (`stat/health`).
     fn health(&self) -> Result<Vec<HealthSubsystem>>;
+    /// The controller's name and versions (`stat/sysinfo`).
+    fn sysinfo(&self) -> Result<Vec<SysInfo>>;
+    /// The UniFi OS console (`/api/system`, outside the Network app); needs
+    /// an API key. `None` with a session login, which means a legacy
+    /// controller without UniFi OS.
+    fn system(&self) -> Result<Option<ConsoleSystem>>;
     /// One page of the system log. Never cached.
     fn system_log(&self, query: &LogQuery) -> Result<SystemLogPage>;
     /// Traffic per client and application between two epoch milliseconds.

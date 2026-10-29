@@ -173,12 +173,15 @@ access point each one is on.
 
 ### Status
 
-`unifictl status` answers "is anything wrong?" on one screen: a line per
-WAN, then devices, Wi-Fi, wired, alarms and firmware updates, each with a
-verdict, and the culprits named below the line:
+`unifictl status` answers "is anything wrong?" on one screen. It opens with
+the controller's name and versions, then a line per WAN, devices, Wi-Fi,
+wired, alarms and firmware updates, each with a verdict, and the culprits
+named below the line:
 
 ```sh
 $ unifictl status
+console-01  UniFi OS 4.3.6 · Network 9.4.19
+
 WAN      ok     Internet 1  up 3d 4h 0m 0s  99.98% over 24h  11 ms
 WAN      idle   Internet 2  not connected since boot
 DEVICES  error  8 of 9 online
@@ -187,7 +190,8 @@ WI-FI    warn   4 APs, 38 clients
                 poor experience: printer-0b02 (38), roborock-0c04 (41)
 WIRED    ok     3 switches, 41 clients
 ALARMS   ok     no high-severity events in 24h
-UPDATES  info   ap-office 7.1.66 → 7.1.68
+UPDATES  info   console-01 UniFi OS 4.3.6 → update available
+                ap-office 7.1.66 → 7.1.68
 ```
 
 Verdicts combine unifictl's own checks (the same thresholds as the list
@@ -197,6 +201,10 @@ error. Alarms are the high-severity system log entries of the last 24 hours
 (`unifictl logs -p high -S -24h` lists them all). The command exits 1 when a
 row is `error`. A row whose data cannot be read says so and shows `unknown`
 without failing the command.
+
+With an API key, the updates line also shows a pending UniFi OS update for
+the console itself. The console doesn't tell an API key which version it
+will update to, so the line says `update available`.
 
 ### Traffic
 

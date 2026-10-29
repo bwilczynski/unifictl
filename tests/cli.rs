@@ -724,8 +724,14 @@ mod with_fixtures {
             "{}",
             String::from_utf8_lossy(&o.stderr)
         );
+        assert!(
+            stdout(&o).starts_with("console-01  UniFi OS 4.3.6 · Network 9.4.19\n\n"),
+            "{}",
+            stdout(&o)
+        );
         let labels: Vec<String> = stdout(&o)
             .lines()
+            .skip(2)
             .filter(|l| !l.starts_with(' '))
             .map(|l| l.split_whitespace().next().unwrap().to_string())
             .collect();
@@ -744,6 +750,9 @@ mod with_fixtures {
         let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
         assert_eq!(v["rows"].as_array().unwrap().len(), 7);
         assert_eq!(v["rows"][2]["area"], "devices");
+        assert_eq!(v["controller"]["name"], "console-01");
+        assert_eq!(v["controller"]["osVersion"], "4.3.6");
+        assert_eq!(v["rows"][6]["console"]["updateAvailable"], true);
         assert!(!stdout(&o).contains('\x1b'));
         let o = status_in(&fixtures(), &["-o", "ids"]);
         assert_eq!(o.status.code(), Some(1));

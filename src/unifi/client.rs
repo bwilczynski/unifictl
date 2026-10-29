@@ -12,8 +12,8 @@ use serde_json::json;
 
 use super::UnifiApi;
 use super::types::{
-    ClientV2, Device, DpiEntry, DpiPage, Envelope, HealthSubsystem, LogQuery, NetworkConf, Site,
-    Sta, SystemLogPage, TrafficReport, WanHistory, WlanConf,
+    ClientV2, ConsoleSystem, Device, DpiEntry, DpiPage, Envelope, HealthSubsystem, LogQuery,
+    NetworkConf, Site, Sta, SysInfo, SystemLogPage, TrafficReport, WanHistory, WlanConf,
 };
 use crate::cache::{Cache, sha256_hex};
 use crate::config::{Auth, Config, Secret};
@@ -449,6 +449,20 @@ impl UnifiApi for UnifiClient {
 
     fn health(&self) -> Result<Vec<HealthSubsystem>> {
         self.get_data("stat/health")
+    }
+
+    fn sysinfo(&self) -> Result<Vec<SysInfo>> {
+        self.get_data("stat/sysinfo")
+    }
+
+    /// At the console's root, not under `/proxy/network`.
+    fn system(&self) -> Result<Option<ConsoleSystem>> {
+        match self.auth {
+            Auth::Session { .. } => Ok(None),
+            Auth::ApiKey(_) => self
+                .get_url(&format!("{}/api/system", self.base_url), None)
+                .map(Some),
+        }
     }
 
     fn system_log(&self, query: &LogQuery) -> Result<SystemLogPage> {
@@ -1635,5 +1649,52 @@ mod tests {
             v.names_unavailable.as_deref(),
             Some("unifi request: status 404")
         );
+    }
+
+    #[test]
+    fn system_uses_root_path_with_api_key() {
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/api/system")
+                .header("X-API-KEY", "k");
+            then.status(200)
+                .json_body(json!({"name": "console-01", "deviceState": "updateAvailable"}));
+        });
+        let system = api_key_client(&server).system().unwrap().unwrap();
+        m.assert();
+        assert!(system.update_available());
+        assert_eq!(system.name, "console-01");
+    }
+
+    #[test]
+    fn system_is_none_in_session_mode() {
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET).path("/api/system");
+            then.status(200)
+                .json_body(json!({"deviceState": "updateAvailable"}));
+        });
+        assert!(session_client(&server).system().unwrap().is_none());
+        m.assert_calls(0);
+    }
+
+    #[test]
+    fn sysinfo_reads_stat_sysinfo() {
+        let server = MockServer::start();
+        let m = server.mock(|when, then| {
+            when.method(GET)
+                .path("/proxy/network/api/s/default/stat/sysinfo")
+                .header("X-API-KEY", "k");
+            then.status(200).json_body(json!({
+                "meta": {"rc": "ok"},
+                "data": [{"name": "console-01", "version": "9.4.19", "console_display_version": "4.3.6"}]
+            }));
+        });
+        let info = api_key_client(&server).sysinfo().unwrap();
+        m.assert();
+        assert_eq!(info[0].name, "console-01");
+        assert_eq!(info[0].version, "9.4.19");
+        assert_eq!(info[0].console_display_version, "4.3.6");
     }
 }

@@ -11,12 +11,13 @@ use super::wans::{build_wan, find_gateway, outages};
 use crate::error::{Error, Result};
 use crate::health::{self, Health};
 use crate::model::{
-    DeviceRef, DeviceTransition, DeviceType, FirmwareUpdate, LogSeverity, PoorClient, SiteStatus,
-    StatusArea, StatusRow, Verdict, Wan, WanOutage, WanStatus,
+    ConsoleUpdate, Controller, DeviceRef, DeviceTransition, DeviceType, FirmwareUpdate,
+    LogSeverity, PoorClient, SiteStatus, StatusArea, StatusRow, Verdict, Wan, WanOutage, WanStatus,
 };
 use crate::unifi::fetch;
 use crate::unifi::types::{
-    ClientV2, Device, HealthSubsystem, NetworkConf, SystemLogEntry, WanHistory,
+    ClientV2, ConsoleSystem, Device, HealthSubsystem, NetworkConf, SysInfo, SystemLogEntry,
+    WanHistory,
 };
 
 /// The window for outages and alarms: the last 24 hours.
@@ -34,6 +35,8 @@ impl Service {
     /// A row per area as of `now_ms`. The device list and network config
     /// are required; health, clients, WAN history and the system log are
     /// not, and leave their rows `unknown` or without that check when they
+    /// cannot be read. The controller header (`stat/sysinfo`) and the
+    /// console's UniFi OS update (`/api/system`) are left out when they
     /// cannot be read.
     pub fn status(&self, now_ms: i64, tz: &TimeZone) -> Result<SiteStatus> {
         fetch!(
@@ -43,7 +46,10 @@ impl Service {
             health = Ok::<_, Error>(self.api.health().ok()),
             history = Ok::<_, Error>(self.api.wan_history(STATUS_WINDOW_SECONDS).ok()),
             alarms = Ok::<_, Error>(self.alarm_log(now_ms).ok()),
+            sysinfo = Ok::<_, Error>(self.api.sysinfo().ok()),
+            system = Ok::<_, Error>(self.api.system().ok().flatten()),
         );
+        let info = sysinfo.as_deref().and_then(<[SysInfo]>::first);
         let sub = Subsystems(health.as_deref().unwrap_or_default());
         let since_ms = now_ms - STATUS_WINDOW_SECONDS * 1000;
         let mut rows = wan_rows(&networks, &devices, history.as_ref(), &sub, since_ms, tz);
@@ -51,8 +57,11 @@ impl Service {
         rows.push(wifi_row(&devices, clients.as_deref(), &sub));
         rows.push(wired_row(&devices, clients.as_deref(), &sub));
         rows.push(alarms_row(alarms.as_deref(), tz));
-        rows.push(updates_row(&devices));
-        Ok(SiteStatus { rows })
+        rows.push(updates_row(&devices, console_update(system.as_ref(), info)));
+        Ok(SiteStatus {
+            controller: controller(info),
+            rows,
+        })
     }
 
     /// High and very-high system log entries over the window, newest first.
@@ -309,8 +318,37 @@ fn alarms_row(log: Option<&[SystemLogEntry]>, tz: &TimeZone) -> StatusRow {
     )
 }
 
+/// `s`, or `None` when empty.
+fn non_empty(s: &str) -> Option<String> {
+    (!s.is_empty()).then(|| s.to_string())
+}
+
+/// The controller header; `None` without a name to show.
+fn controller(info: Option<&SysInfo>) -> Option<Controller> {
+    let info = info?;
+    Some(Controller {
+        name: non_empty(&info.name)?,
+        os_version: non_empty(&info.console_display_version),
+        network_version: non_empty(&info.version),
+    })
+}
+
+/// The console's pending UniFi OS update, named after `/api/system`, else
+/// `stat/sysinfo`, else plain `console`.
+fn console_update(system: Option<&ConsoleSystem>, info: Option<&SysInfo>) -> Option<ConsoleUpdate> {
+    let system = system.filter(|s| s.update_available())?;
+    let name = non_empty(&system.name)
+        .or_else(|| info.and_then(|i| non_empty(&i.name)))
+        .unwrap_or_else(|| "console".to_string());
+    Some(ConsoleUpdate {
+        name,
+        version: info.and_then(|i| non_empty(&i.console_display_version)),
+        update_available: true,
+    })
+}
+
 /// Informational: an available update is never a problem.
-fn updates_row(devices: &[Device]) -> StatusRow {
+fn updates_row(devices: &[Device], console: Option<ConsoleUpdate>) -> StatusRow {
     let updates: Vec<FirmwareUpdate> = devices
         .iter()
         .filter(|d| d.upgradable && !d.upgrade_to_firmware.is_empty())
@@ -320,20 +358,21 @@ fn updates_row(devices: &[Device]) -> StatusRow {
             to: d.upgrade_to_firmware.clone(),
         })
         .collect();
-    let verdict = if updates.is_empty() {
+    let verdict = if updates.is_empty() && console.is_none() {
         Verdict::Ok
     } else {
         Verdict::Info
     };
-    row(verdict, StatusArea::Updates { updates })
+    row(verdict, StatusArea::Updates { updates, console })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{ConsoleUpdate, Controller};
     use crate::service::testutil::{fixtures, svc};
     use crate::unifi::fixtures::FixtureApi;
-    use crate::unifi::types::HealthSubsystem;
+    use crate::unifi::types::{ConsoleSystem, HealthSubsystem};
     use jiff::tz::TimeZone;
 
     /// `UNIFICTL_NOW` in the CLI tests: 2026-10-11T12:00:00Z.
@@ -691,7 +730,7 @@ mod tests {
     #[test]
     fn updates_list_upgradable_devices() {
         let s = status(fixtures());
-        let StatusArea::Updates { updates } = &area(&s, "updates").area else {
+        let StatusArea::Updates { updates, .. } = &area(&s, "updates").area else {
             panic!()
         };
         let u: Vec<(&str, &str, &str)> = updates
@@ -702,6 +741,7 @@ mod tests {
 
         let mut api = fixtures();
         api.devices[1].upgradable = false;
+        api.system = None;
         assert_eq!(area(&status(api), "updates").verdict, Verdict::Ok);
     }
 
@@ -750,5 +790,148 @@ mod tests {
             })
         );
         assert!(v["rows"][3].get("unavailable").is_none());
+    }
+
+    #[test]
+    fn controller_from_sysinfo() {
+        let c = status(fixtures()).controller.unwrap();
+        assert_eq!(
+            c,
+            Controller {
+                name: "console-01".into(),
+                os_version: Some("4.3.6".into()),
+                network_version: Some("9.4.19".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn no_controller_without_sysinfo_or_name() {
+        let failed = FixtureApi {
+            fail_only: vec!["sysinfo"],
+            ..fixtures()
+        };
+        assert!(status(failed).controller.is_none());
+        let empty = FixtureApi {
+            sysinfo: Some(vec![]),
+            ..fixtures()
+        };
+        assert!(status(empty).controller.is_none());
+        let mut nameless = fixtures();
+        nameless.sysinfo.as_mut().unwrap()[0].name.clear();
+        assert!(status(nameless).controller.is_none());
+    }
+
+    #[test]
+    fn legacy_controller_has_no_os_version() {
+        let mut api = fixtures();
+        api.sysinfo.as_mut().unwrap()[0]
+            .console_display_version
+            .clear();
+        let c = status(api).controller.unwrap();
+        assert_eq!(c.os_version, None);
+        assert_eq!(c.network_version.as_deref(), Some("9.4.19"));
+    }
+
+    #[test]
+    fn console_update_listed_when_pending() {
+        let s = status(fixtures());
+        let row = area(&s, "updates");
+        assert_eq!(row.verdict, Verdict::Info);
+        let StatusArea::Updates { updates, console } = &row.area else {
+            panic!("not updates")
+        };
+        assert_eq!(updates.len(), 1, "device updates still listed");
+        assert_eq!(
+            console.as_ref().unwrap(),
+            &ConsoleUpdate {
+                name: "console-01".into(),
+                version: Some("4.3.6".into()),
+                update_available: true,
+            }
+        );
+    }
+
+    #[test]
+    fn console_update_alone_makes_updates_info() {
+        let mut api = fixtures();
+        api.devices[1].upgradable = false;
+        assert_eq!(area(&status(api), "updates").verdict, Verdict::Info);
+    }
+
+    #[test]
+    fn no_console_update_unless_pending_and_readable() {
+        let state = |s: &str| {
+            Some(ConsoleSystem {
+                name: "console-01".into(),
+                device_state: s.into(),
+            })
+        };
+        for api in [
+            FixtureApi {
+                system: state("ready"),
+                ..fixtures()
+            },
+            FixtureApi {
+                system: state("updating"),
+                ..fixtures()
+            },
+            FixtureApi {
+                system: state(""),
+                ..fixtures()
+            },
+            FixtureApi {
+                fail_only: vec!["system"],
+                ..fixtures()
+            },
+            FixtureApi {
+                system: None,
+                ..fixtures()
+            },
+        ] {
+            let mut api = api;
+            api.devices[1].upgradable = false;
+            let s = status(api);
+            let row = area(&s, "updates");
+            assert_eq!(row.verdict, Verdict::Ok);
+            assert!(matches!(
+                &row.area,
+                StatusArea::Updates { console: None, .. }
+            ));
+            assert!(!s.has_error());
+        }
+    }
+
+    #[test]
+    fn console_name_falls_back_to_sysinfo() {
+        let mut api = fixtures();
+        api.system.as_mut().unwrap().name.clear();
+        let s = status(api);
+        let StatusArea::Updates { console, .. } = &area(&s, "updates").area else {
+            panic!("not updates")
+        };
+        assert_eq!(console.as_ref().unwrap().name, "console-01");
+    }
+
+    #[test]
+    fn console_and_controller_in_json() {
+        let v = serde_json::to_value(status(fixtures())).unwrap();
+        let keys: Vec<&String> = v.as_object().unwrap().keys().collect();
+        assert_eq!(keys, ["controller", "rows"]);
+        assert_eq!(v["controller"]["osVersion"], "4.3.6");
+        assert_eq!(v["controller"]["networkVersion"], "9.4.19");
+        let updates = v["rows"].as_array().unwrap().last().unwrap().clone();
+        assert_eq!(updates["console"]["updateAvailable"], true);
+        assert_eq!(updates["console"]["version"], "4.3.6");
+
+        let mut api = FixtureApi {
+            fail_only: vec!["sysinfo", "system"],
+            ..fixtures()
+        };
+        api.devices[1].upgradable = false;
+        let v = serde_json::to_value(status(api)).unwrap();
+        assert!(v.get("controller").is_none());
+        let updates = v["rows"].as_array().unwrap().last().unwrap().clone();
+        assert!(updates.get("console").is_none());
     }
 }
