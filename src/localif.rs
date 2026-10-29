@@ -125,8 +125,8 @@ mod macos {
     use super::{Interface, macos_up, read_error};
     use crate::error::Result;
 
-    /// `struct ifmediareq` from `<net/if_media.h>`.
-    #[repr(C)]
+    /// `struct ifmediareq` from `<net/if.h>`, declared under `#pragma pack(4)`.
+    #[repr(C, packed(4))]
     struct IfMediaReq {
         ifm_name: [libc::c_char; libc::IFNAMSIZ],
         ifm_current: libc::c_int,
@@ -137,14 +137,12 @@ mod macos {
         ifm_ulist: *mut libc::c_int,
     }
 
-    // The 64-bit layout the kernel expects for SIOCGIFMEDIA.
-    const _: () = assert!(std::mem::size_of::<IfMediaReq>() == 48);
-
-    /// `SIOCGIFMEDIA`: `_IOWR('i', 56, struct ifmediareq)`.
-    const SIOCGIFMEDIA: libc::c_ulong = 0xc000_0000
-        | (((std::mem::size_of::<IfMediaReq>() as libc::c_ulong) & 0x1fff) << 16)
-        | ((b'i' as libc::c_ulong) << 8)
-        | 56;
+    // SIOCGIFMEDIA encodes the struct size (44 bytes on 64-bit); a layout
+    // mismatch makes every ioctl fail and silently drops the media check.
+    const _: () = assert!(
+        std::mem::size_of::<IfMediaReq>() as libc::c_ulong == (libc::SIOCGIFMEDIA >> 16) & 0x1fff
+    );
+    const _: () = assert!(std::mem::size_of::<IfMediaReq>() == 44);
 
     /// The interface's media status, or `None` when it has none to report.
     fn media_status(sock: libc::c_int, name: &std::ffi::CStr) -> Option<i32> {
@@ -161,7 +159,7 @@ mod macos {
             *dst = *src as libc::c_char;
         }
         // SAFETY: `req` is a properly sized, NUL-terminated ifmediareq.
-        let rc = unsafe { libc::ioctl(sock, SIOCGIFMEDIA, &mut req) };
+        let rc = unsafe { libc::ioctl(sock, libc::SIOCGIFMEDIA, &mut req) };
         (rc == 0).then_some(req.ifm_status)
     }
 
