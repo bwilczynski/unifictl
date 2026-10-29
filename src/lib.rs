@@ -4,6 +4,7 @@ pub mod cli;
 pub mod completion;
 pub mod config;
 pub mod error;
+pub mod health;
 pub mod model;
 mod private_fs;
 pub mod render;

@@ -3,7 +3,10 @@
 
 use std::collections::BTreeMap;
 
+use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
+
+use crate::health::{self, Health};
 
 macro_rules! str_enum {
     ($name:ident { $($variant:ident => $s:literal),+ $(,)? }) => {
@@ -182,6 +185,7 @@ pub struct Traffic {
 /// `NetworkConnection`: where a device or wired client attaches upstream.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(remote = "Self")]
 pub struct Connection {
     pub device: DeviceRef,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -199,6 +203,7 @@ pub struct Connection {
 /// flattens it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(remote = "Self")]
 pub struct NetworkDevice {
     pub id: String,
     pub name: String,
@@ -285,6 +290,7 @@ pub struct GatewayDetail {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(remote = "Self")]
 pub struct ApClient {
     pub client: ClientRef,
     pub ssid: String,
@@ -334,6 +340,7 @@ pub struct NetworkPortList {
 /// is connected, its live figures. Every figure is `null` when unknown.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(remote = "Self")]
 pub struct Radio {
     /// `<device-id>/<band>` (`ap-office/2.4g`), or `<device-id>/<name>` when
     /// the AP has two radios on one band.
@@ -386,6 +393,7 @@ pub struct Rates {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(remote = "Self")]
 pub struct WirelessConnection {
     pub device: DeviceRef,
     pub ssid: String,
@@ -408,6 +416,7 @@ pub enum ClientConnection {
 /// only set while it is online.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(remote = "Self")]
 pub struct NetworkClient {
     pub id: String,
     pub name: String,
@@ -467,6 +476,7 @@ pub enum TopologyNode {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(remote = "Self")]
 pub struct TopologyWiredEdge {
     pub kind: &'static str,
     pub source: ConnectionRef,
@@ -484,6 +494,7 @@ pub struct TopologyWiredEdge {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(remote = "Self")]
 pub struct TopologyWirelessEdge {
     pub kind: &'static str,
     pub source: ClientRef,
@@ -549,6 +560,7 @@ pub const AVAILABILITY_WINDOW_SECONDS: i64 = 24 * 60 * 60;
 /// A WAN, the same in `wans list` and `wans get`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(remote = "Self")]
 pub struct Wan {
     pub id: String,
     pub name: String,
@@ -581,6 +593,7 @@ pub struct WanDetail {
 /// Outages over the window the controller covered, which ends now.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(remote = "Self")]
 pub struct WanOutages {
     /// RFC 3339 with the local offset.
     pub since: String,
@@ -913,6 +926,101 @@ pub struct FirmwareUpdate {
     pub to: String,
 }
 
+// ---------- health grades ----------
+
+/// Grade fields (`signalStrengthHealth: "fair"`), each skipped when the
+/// number it grades is missing.
+struct Grades<const N: usize>([(&'static str, Option<Health>); N]);
+
+impl<const N: usize> Serialize for Grades<N> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut m = s.serialize_map(None)?;
+        for (key, grade) in &self.0 {
+            if let Some(g) = grade {
+                m.serialize_entry(key, g)?;
+            }
+        }
+        m.end()
+    }
+}
+
+#[derive(Serialize)]
+struct WithGrades<F, G> {
+    #[serde(flatten)]
+    fields: F,
+    #[serde(flatten)]
+    grades: G,
+}
+
+/// `Serialize` for `$ty`: its derived fields, from `#[serde(remote = "Self")]`,
+/// followed by the health grades the table shows as colour. Grades are
+/// computed here, from the same thresholds, so the two cannot disagree.
+macro_rules! graded {
+    ($ty:ident, |$v:ident| { $($key:literal => $grade:expr),+ $(,)? }) => {
+        impl Serialize for $ty {
+            fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+                struct Fields<'a>(&'a $ty);
+                impl Serialize for Fields<'_> {
+                    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+                        $ty::serialize(self.0, s)
+                    }
+                }
+                let $v = self;
+                WithGrades {
+                    fields: Fields($v),
+                    grades: Grades([$(($key, $grade)),+]),
+                }
+                .serialize(s)
+            }
+        }
+    };
+}
+
+/// A wired link: graded against what both ends allow when that is known
+/// (device uplinks), on absolute speed otherwise (clients).
+fn link_grade(
+    speed: Option<LinkSpeed>,
+    max: Option<LinkSpeed>,
+    full_duplex: Option<bool>,
+) -> Option<Health> {
+    speed.map(|s| health::uplink(s, max, full_duplex))
+}
+
+graded!(Connection, |c| {
+    "linkSpeedHealth" => link_grade(c.link_speed, c.max_link_speed, c.full_duplex),
+});
+graded!(NetworkDevice, |d| {
+    "experienceHealth" => d.experience.map(health::experience),
+});
+graded!(ApClient, |c| {
+    "signalStrengthHealth" => Some(health::signal(c.signal_strength)),
+});
+graded!(Radio, |r| {
+    "utilisationHealth" => r.utilisation.map(health::utilisation),
+    "interferenceHealth" => r.interference.map(health::interference),
+    "retriesHealth" => r.retries.map(health::retries),
+    "satisfactionHealth" => r.satisfaction.map(health::experience),
+});
+graded!(WirelessConnection, |c| {
+    "signalStrengthHealth" => c.signal_strength.map(health::signal),
+});
+graded!(NetworkClient, |c| {
+    "experienceHealth" => c.experience.map(health::experience),
+});
+graded!(TopologyWiredEdge, |e| {
+    "linkSpeedHealth" => link_grade(e.link_speed, e.max_link_speed, e.full_duplex),
+});
+graded!(TopologyWirelessEdge, |e| {
+    "signalStrengthHealth" => e.signal_strength.map(health::signal),
+});
+graded!(Wan, |w| {
+    "availabilityHealth" => w.availability.map(health::availability),
+    "latencyHealth" => w.latency.map(health::latency),
+});
+graded!(WanOutages, |o| {
+    "availabilityHealth" => o.availability.map(health::availability),
+});
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -1072,5 +1180,231 @@ mod tests {
             LogSeverity::Unknown
         );
         assert_eq!(LogSeverity::VeryHigh.as_str(), "veryHigh");
+    }
+
+    // ---------- health grades in JSON ----------
+
+    fn device(experience: Option<i64>, uplink: Option<Connection>) -> NetworkDevice {
+        NetworkDevice {
+            id: "us-8".into(),
+            name: "US 8".into(),
+            mac: "aa:bb:cc:dd:01:01".into(),
+            ip: "192.168.1.2".into(),
+            device_type: DeviceType::Switch,
+            status: DeviceStatus::Connected,
+            model: "USC8".into(),
+            firmware_version: "1.0".into(),
+            uptime: 5,
+            experience,
+            traffic: traffic(),
+            uplink,
+        }
+    }
+
+    fn uplink(speed: LinkSpeed, max: Option<LinkSpeed>, full_duplex: Option<bool>) -> Connection {
+        Connection {
+            device: DeviceRef::new("cgf-01".into(), "CGF-01".into()),
+            port: Some(3),
+            link_speed: Some(speed),
+            max_link_speed: max,
+            full_duplex,
+        }
+    }
+
+    fn wan(availability: Option<f64>, latency: Option<i64>) -> Wan {
+        Wan {
+            id: "wan1".into(),
+            name: "Fibre".into(),
+            ip_address: "198.51.100.7".into(),
+            status: WanStatus::Connected,
+            uptime: Some(60),
+            downtime: None,
+            availability,
+            availability_period: Some(AVAILABILITY_WINDOW_SECONDS),
+            latency,
+            dns_servers: vec![],
+        }
+    }
+
+    fn radio() -> Radio {
+        Radio {
+            id: "ap-office/5g".into(),
+            name: "wifi1".into(),
+            band: "5G".into(),
+            channel: Some(36),
+            width: Some(80),
+            tx_power_mode: None,
+            tx_power: None,
+            min_rssi: None,
+            utilisation: Some(71),
+            interference: Some(38),
+            retries: Some(9.5),
+            clients: Some(4),
+            satisfaction: Some(97),
+        }
+    }
+
+    fn client(experience: Option<i64>, connected_to: ClientConnection) -> NetworkClient {
+        NetworkClient {
+            id: "phone-0001".into(),
+            name: "phone".into(),
+            mac: "aa:bb:cc:dd:02:01".into(),
+            ip: None,
+            connection_type: ConnectionType::Wireless,
+            status: ClientStatus::Online,
+            connected_to,
+            experience,
+            traffic: None,
+            uptime: None,
+            last_seen: None,
+        }
+    }
+
+    fn wireless(signal_strength: Option<i64>) -> ClientConnection {
+        ClientConnection::Wireless(WirelessConnection {
+            device: DeviceRef::new("ap-office".into(), "AP Office".into()),
+            ssid: "Home".into(),
+            signal_strength,
+            rate_mbps: None,
+        })
+    }
+
+    #[test]
+    fn device_experience_and_uplink_carry_grades() {
+        let d = device(
+            Some(65),
+            Some(uplink(LinkSpeed::Gbe1, Some(LinkSpeed::Gbe2p5), Some(true))),
+        );
+        let v = serde_json::to_value(&d).unwrap();
+        assert_eq!(v["experience"], 65);
+        assert_eq!(v["experienceHealth"], "fair");
+        assert_eq!(
+            v["uplink"]["linkSpeedHealth"], "fair",
+            "below what both ports allow"
+        );
+        let half = uplink(LinkSpeed::Gbe1, Some(LinkSpeed::Gbe1), Some(false));
+        assert_eq!(
+            serde_json::to_value(&half).unwrap()["linkSpeedHealth"],
+            "poor"
+        );
+    }
+
+    #[test]
+    fn missing_values_have_no_grade() {
+        let v = serde_json::to_value(device(None, None)).unwrap();
+        assert!(v.get("experienceHealth").is_none());
+        let mut c = uplink(LinkSpeed::Gbe1, None, None);
+        c.link_speed = None;
+        assert!(
+            serde_json::to_value(&c)
+                .unwrap()
+                .get("linkSpeedHealth")
+                .is_none()
+        );
+        let v = serde_json::to_value(wan(None, None)).unwrap();
+        assert!(v.get("availabilityHealth").is_none());
+        assert!(v.get("latencyHealth").is_none());
+    }
+
+    #[test]
+    fn grades_survive_flattening_into_details() {
+        let detail = NetworkDeviceDetail::Switch(SwitchDetail {
+            base: device(Some(92), None),
+            ports: vec![],
+        });
+        let v = serde_json::to_value(&detail).unwrap();
+        assert_eq!(v["experienceHealth"], "good");
+        assert_eq!(v["firmwareVersion"], "1.0", "base fields still flattened");
+
+        let detail = WanDetail {
+            wan: wan(Some(99.95), Some(120)),
+            outages: Some(WanOutages {
+                since: "2026-10-28T12:00:00+01:00".into(),
+                availability: Some(98.5),
+                items: vec![],
+                since_ms: 0,
+            }),
+        };
+        let v = serde_json::to_value(&detail).unwrap();
+        assert_eq!(v["availabilityHealth"], "good");
+        assert_eq!(v["latencyHealth"], "poor");
+        assert_eq!(v["outages"]["availabilityHealth"], "poor");
+    }
+
+    #[test]
+    fn wan_availability_is_graded_as_shown() {
+        let v = serde_json::to_value(wan(Some(99.895), Some(11))).unwrap();
+        assert_eq!(v["availability"], 99.895, "raw value unchanged");
+        assert_eq!(v["availabilityHealth"], "good", "shown as 99.90%");
+        assert_eq!(v["latencyHealth"], "good");
+    }
+
+    #[test]
+    fn radio_figures_carry_grades() {
+        let v = serde_json::to_value(NetworkRadio {
+            radio: radio(),
+            device: DeviceRef::new("ap-office".into(), "AP Office".into()),
+        })
+        .unwrap();
+        assert_eq!(v["utilisationHealth"], "fair");
+        assert_eq!(v["interferenceHealth"], "poor");
+        assert_eq!(v["retriesHealth"], "fair", "graded on the rounded 10%");
+        assert_eq!(v["satisfactionHealth"], "good");
+    }
+
+    #[test]
+    fn clients_carry_experience_signal_and_link_grades() {
+        let v = serde_json::to_value(client(Some(45), wireless(Some(-69)))).unwrap();
+        assert_eq!(v["experienceHealth"], "poor");
+        assert_eq!(v["connectedTo"]["signalStrength"], -69);
+        assert_eq!(v["connectedTo"]["signalStrengthHealth"], "fair");
+
+        let wired = ClientConnection::Wired(Connection {
+            device: DeviceRef::new("us-8".into(), "US 8".into()),
+            port: Some(4),
+            link_speed: Some(LinkSpeed::Fe),
+            max_link_speed: None,
+            full_duplex: None,
+        });
+        let v = serde_json::to_value(client(None, wired)).unwrap();
+        assert_eq!(v["connectedTo"]["linkSpeedHealth"], "fair", "100 Mbps");
+
+        let ap = ApClient {
+            client: ClientRef::new("phone-0001".into(), "phone".into()),
+            ssid: "Home".into(),
+            signal_strength: -80,
+        };
+        assert_eq!(
+            serde_json::to_value(&ap).unwrap()["signalStrengthHealth"],
+            "poor"
+        );
+    }
+
+    #[test]
+    fn topology_edges_carry_grades() {
+        let wired = TopologyWiredEdge {
+            kind: "wired",
+            source: ConnectionRef::Device(DeviceRef::new("us-8".into(), "US 8".into())),
+            target: DeviceRef::new("cgf-01".into(), "CGF-01".into()),
+            port: Some(3),
+            link_speed: Some(LinkSpeed::Gbe1),
+            max_link_speed: Some(LinkSpeed::Gbe1),
+            full_duplex: Some(true),
+        };
+        assert_eq!(
+            serde_json::to_value(&wired).unwrap()["linkSpeedHealth"],
+            "good"
+        );
+        let wireless = TopologyWirelessEdge {
+            kind: "wireless",
+            source: ClientRef::new("phone-0001".into(), "phone".into()),
+            target: DeviceRef::new("ap-office".into(), "AP Office".into()),
+            ssid: "Home".into(),
+            signal_strength: Some(-60),
+        };
+        assert_eq!(
+            serde_json::to_value(&wireless).unwrap()["signalStrengthHealth"],
+            "good"
+        );
     }
 }

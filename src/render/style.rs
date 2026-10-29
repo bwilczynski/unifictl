@@ -2,7 +2,7 @@
 //! terminal's own palette (e.g. a Catppuccin theme) decides the actual shade.
 
 use super::format::format_link_speed;
-use super::health::{self, Health};
+use crate::health::{self, Health};
 use crate::model::{AppRef, ClientStatus, DeviceStatus, LinkSpeed, PortState, Verdict, WanStatus};
 use crate::setup::check::Status;
 
@@ -142,7 +142,7 @@ pub fn signal(dbm: Option<i64>, on: bool) -> String {
 pub fn availability(pct: Option<f64>, on: bool) -> String {
     pct.map_or_else(dash, |p| {
         let shown = (p * 100.0).round() / 100.0;
-        graded(&format!("{shown:.2}%"), health::availability(shown), on)
+        graded(&format!("{shown:.2}%"), health::availability(p), on)
     })
 }
 
@@ -168,7 +168,9 @@ pub fn interference(pct: Option<i64>, on: bool) -> String {
 
 /// A radio's TX retry rate, rounded to a whole percent and graded on that.
 pub fn retries(pct: Option<f64>, on: bool) -> String {
-    graded_pct(pct.map(|p| p.round() as i64), health::retries, on)
+    pct.map_or_else(dash, |p| {
+        graded(&format!("{}%", p.round() as i64), health::retries(p), on)
+    })
 }
 
 /// A wired client's link speed, graded on absolute speed.
@@ -412,7 +414,7 @@ mod tests {
 
     #[test]
     fn graded_maps_to_traffic_light() {
-        use crate::render::health::Health;
+        use crate::health::Health;
         assert_eq!(graded("x", Health::Good, true), "\x1b[32mx\x1b[0m");
         assert_eq!(graded("x", Health::Fair, true), "\x1b[33mx\x1b[0m");
         assert_eq!(graded("x", Health::Poor, true), "\x1b[31mx\x1b[0m");

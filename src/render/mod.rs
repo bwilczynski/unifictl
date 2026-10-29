@@ -5,7 +5,6 @@ pub mod check;
 pub mod clients;
 pub mod devices;
 pub mod format;
-pub mod health;
 pub mod logs;
 pub mod ports;
 pub mod radios;

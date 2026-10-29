@@ -152,6 +152,11 @@ availability and latency, and radio utilisation, interference and retries),
 download is cyan and upload magenta, and names are blue, in your terminal's own
 palette. `--color always|never` overrides that; `NO_COLOR` turns it off.
 
+`-o json` carries the same grades as words, so scripts and widgets need no
+thresholds of their own: each graded number gets a `good`, `fair` or `poor`
+field named after it (`"signalStrength": -69, "signalStrengthHealth": "fair"`),
+left out when the number is missing.
+
 Every device, then zooming in on a switch: its port table with PoE draw,
 per-port traffic and who's on the other end of each cable, and its VLAN
 config. Then the whole network as a tree, with the wireless clients under the

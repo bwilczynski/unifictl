@@ -1,9 +1,13 @@
 //! Green/yellow/red grading of link health. Thresholds only; `style` turns a
-//! grade into colour.
+//! grade into colour, and JSON output carries it as `good`, `fair` or `poor`
+//! next to the graded number. Values are graded as the table shows them.
+
+use serde::Serialize;
 
 use crate::model::LinkSpeed;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Health {
     Good,
     Fair,
@@ -28,8 +32,9 @@ pub fn signal(dbm: i64) -> Health {
     }
 }
 
-/// WAN availability in percent, as displayed (two decimals).
+/// WAN availability in percent, rounded to the two decimals shown.
 pub fn availability(pct: f64) -> Health {
+    let pct = (pct * 100.0).round() / 100.0;
     if pct >= 99.9 {
         Health::Good
     } else if pct >= 99.0 {
@@ -66,9 +71,10 @@ pub fn interference(pct: i64) -> Health {
     }
 }
 
-/// Share of transmissions retried, percent.
-pub fn retries(pct: i64) -> Health {
-    match pct {
+/// Share of transmissions retried, percent, rounded to the whole percent
+/// shown.
+pub fn retries(pct: f64) -> Health {
+    match pct.round() as i64 {
         ..10 => Health::Good,
         10..=19 => Health::Fair,
         _ => Health::Poor,
@@ -121,10 +127,16 @@ mod tests {
 
     #[test]
     fn retries_boundaries() {
-        assert_eq!(retries(9), Health::Good);
-        assert_eq!(retries(10), Health::Fair);
-        assert_eq!(retries(19), Health::Fair);
-        assert_eq!(retries(20), Health::Poor);
+        assert_eq!(retries(9.0), Health::Good);
+        assert_eq!(retries(10.0), Health::Fair);
+        assert_eq!(retries(19.0), Health::Fair);
+        assert_eq!(retries(20.0), Health::Poor);
+    }
+
+    #[test]
+    fn retries_are_graded_on_the_whole_percent_shown() {
+        assert_eq!(retries(9.4), Health::Good);
+        assert_eq!(retries(9.5), Health::Fair);
     }
 
     #[test]
@@ -153,6 +165,19 @@ mod tests {
         assert_eq!(availability(99.89), Health::Fair);
         assert_eq!(availability(99.0), Health::Fair);
         assert_eq!(availability(98.99), Health::Poor);
+    }
+
+    #[test]
+    fn availability_is_graded_on_the_two_decimals_shown() {
+        assert_eq!(availability(99.895), Health::Good, "shown as 99.90%");
+        assert_eq!(availability(99.894), Health::Fair, "shown as 99.89%");
+    }
+
+    #[test]
+    fn grades_serialize_as_lowercase_words() {
+        assert_eq!(serde_json::to_value(Health::Good).unwrap(), "good");
+        assert_eq!(serde_json::to_value(Health::Fair).unwrap(), "fair");
+        assert_eq!(serde_json::to_value(Health::Poor).unwrap(), "poor");
     }
 
     #[test]
