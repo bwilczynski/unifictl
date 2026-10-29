@@ -114,7 +114,7 @@ so a `list` followed by a few `get`s asks the controller once. Pass
 ```
 unifictl status
 unifictl devices list [--type gateway|switch|access-point] [--status connected|disconnected] [--wide] | get <id> [--all-ports]
-unifictl clients list [--status online|offline | --all] [--connection wired|wireless] [--device ID] [--ssid ID] [--wide]
+unifictl clients list [--status online|offline | --all] [--connection wired|wireless] [--device ID] [--ssid ID] [--self] [--wide]
 unifictl clients get <id> | traffic [<id> | --by-app] [-S WHEN] [-U WHEN]
 unifictl topology [--include-clients] [--include-wireless]
 unifictl ports list [--device ID] [--mode trunk|access] [--state up|down|disabled | --all] [--vlan N] [--wide]
@@ -132,6 +132,13 @@ IDs are kebab-case names (`us-8-60w`); clients add the last two MAC bytes (`nas-
 you pick a `--status`/`--state` or pass `--all`. Filters combine, so
 `unifictl clients list --device ap-office --connection wireless` lists who is
 on that access point right now.
+
+`unifictl clients list --self --wide` shows the machine you are on: which
+switch port or access point it hangs off and how that link is doing. It
+matches the MAC of each active network interface (VPN, Docker and other
+virtual interfaces are ignored), so a docked laptop with Wi-Fi still on shows
+both rows, wired first. The list is empty when this machine is not a client
+of the controller.
 
 `devices list` and `clients list` show an EXPERIENCE column (UniFi's score)
 for spotting trouble quickly; `wans list` shows each WAN's own uptime and its

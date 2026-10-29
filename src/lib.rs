@@ -5,6 +5,7 @@ pub mod completion;
 pub mod config;
 pub mod error;
 pub mod health;
+pub mod localif;
 pub mod model;
 mod private_fs;
 pub mod render;

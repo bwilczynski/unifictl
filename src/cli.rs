@@ -199,6 +199,9 @@ pub struct ClientsListArgs {
     /// Show offline clients too (overrides the default status=online filter)
     #[arg(long)]
     pub all: bool,
+    /// Only this machine: clients whose MAC is one of its active network interfaces
+    #[arg(long = "self")]
+    pub self_: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

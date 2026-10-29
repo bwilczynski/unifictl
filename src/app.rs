@@ -9,14 +9,15 @@ use serde::Serialize;
 
 use crate::cache::Cache;
 use crate::cli::{
-    CategoryArg, Cli, ClientsCommand, ColorMode, Command, ConfigCommand, ConnectionFilter,
-    DeviceStatusFilter, DeviceTypeFilter, DevicesCommand, LogsArgs, LookupCommand, ModeFilter,
-    OutputFormat, PortsCommand, PriorityArg, RadiosCommand, StateFilter, StatusFilter, TrafficArgs,
-    WansCommand,
+    CategoryArg, Cli, ClientsCommand, ClientsListArgs, ColorMode, Command, ConfigCommand,
+    ConnectionFilter, DeviceStatusFilter, DeviceTypeFilter, DevicesCommand, LogsArgs,
+    LookupCommand, ModeFilter, OutputFormat, PortsCommand, PriorityArg, RadiosCommand, StateFilter,
+    StatusFilter, TrafficArgs, WansCommand,
 };
 use crate::completion;
 use crate::config;
 use crate::error::{Error, Result};
+use crate::localif;
 use crate::model::{
     ClientStatus, ConnectionType, DeviceStatus, DeviceType, Ids, LogEntry, LogSeverity, PortState,
     VlanMode,
@@ -107,6 +108,12 @@ pub fn run(cli: Cli) -> Result<Outcome> {
     } = &cli.command
     {
         return run_traffic(&svc, args, cli.output, color, &env).map(Outcome::ok);
+    }
+    if let Command::Clients {
+        command: ClientsCommand::List(args),
+    } = &cli.command
+    {
+        return run_clients_list(&svc, args, cli.output, color, &env).map(Outcome::ok);
     }
     if let Command::Wans {
         command: WansCommand::Get { id, since },
@@ -251,6 +258,67 @@ fn default_lines(follow: bool, window: bool) -> Option<usize> {
     } else {
         Some(50)
     }
+}
+
+/// `clients list`: `--self` reads this machine's network interfaces.
+fn run_clients_list(
+    svc: &Service,
+    args: &ClientsListArgs,
+    out: OutputFormat,
+    color: bool,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<String> {
+    let filter = ClientFilter {
+        // Online only unless --status or --all is given, like ports.
+        status: if args.all {
+            None
+        } else {
+            Some(match args.status {
+                Some(StatusFilter::Offline) => ClientStatus::Offline,
+                Some(StatusFilter::Online) | None => ClientStatus::Online,
+            })
+        },
+        connection: args.connection.map(|c| match c {
+            ConnectionFilter::Wired => ConnectionType::Wired,
+            ConnectionFilter::Wireless => ConnectionType::Wireless,
+        }),
+        device_id: args.device.clone(),
+        ssid_id: args.ssid.clone(),
+        self_macs: if args.self_ {
+            Some(self_macs(env)?)
+        } else {
+            None
+        },
+    };
+    emit_list(out, &svc.list_clients(&filter)?, |l| {
+        render::clients::list(l, args.wide, color, &TimeZone::system())
+    })
+}
+
+/// This machine's usable MACs. Fixture builds read `UNIFICTL_SELF_MACS`
+/// (comma-separated) or a sysfs root from `UNIFICTL_SYSFS`, so tests do not
+/// depend on the machine running them.
+fn self_macs(env: &dyn Fn(&str) -> Option<String>) -> Result<Vec<String>> {
+    #[cfg(feature = "fixtures")]
+    {
+        if let Some(macs) = env("UNIFICTL_SELF_MACS") {
+            return Ok(macs
+                .split(',')
+                .map(str::trim)
+                .filter(|m| !m.is_empty())
+                .map(String::from)
+                .collect());
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(root) = env("UNIFICTL_SYSFS") {
+            return Ok(localif::usable_macs(&localif::read_sysfs(
+                std::path::Path::new(&root),
+            )?));
+        }
+    }
+    #[cfg(not(feature = "fixtures"))]
+    let _ = env;
+    Ok(localif::usable_macs(&localif::read()?))
 }
 
 /// `clients traffic`: needs the clock for its window, and notes on stderr
@@ -449,28 +517,7 @@ pub fn execute(svc: &Service, cmd: &Command, out: OutputFormat, color: bool) -> 
             }),
         },
         Command::Clients { command } => match command {
-            ClientsCommand::List(args) => {
-                let filter = ClientFilter {
-                    // Online only unless --status or --all is given, like ports.
-                    status: if args.all {
-                        None
-                    } else {
-                        Some(match args.status {
-                            Some(StatusFilter::Offline) => ClientStatus::Offline,
-                            Some(StatusFilter::Online) | None => ClientStatus::Online,
-                        })
-                    },
-                    connection: args.connection.map(|c| match c {
-                        ConnectionFilter::Wired => ConnectionType::Wired,
-                        ConnectionFilter::Wireless => ConnectionType::Wireless,
-                    }),
-                    device_id: args.device.clone(),
-                    ssid_id: args.ssid.clone(),
-                };
-                emit_list(out, &svc.list_clients(&filter)?, |l| {
-                    render::clients::list(l, args.wide, color, &TimeZone::system())
-                })
-            }
+            ClientsCommand::List(_) => unreachable!("list is handled by run"),
             ClientsCommand::Get { id } => emit(out, &svc.get_client(id)?, |c| {
                 render::clients::get(c, color, &TimeZone::system())
             }),

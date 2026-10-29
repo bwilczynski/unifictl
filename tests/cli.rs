@@ -500,6 +500,85 @@ mod with_fixtures {
         );
     }
 
+    fn run_self(macs: &str, args: &[&str]) -> Output {
+        Command::new(env!("CARGO_BIN_EXE_unifictl"))
+            .arg("--fixtures")
+            .arg(fixtures())
+            .args(args)
+            .env("UNIFICTL_SELF_MACS", macs)
+            .env_remove("UNIFICTL_SYSFS")
+            .output()
+            .unwrap()
+    }
+
+    #[test]
+    fn clients_list_self_shows_both_wired_first() {
+        let o = run_self(
+            "3c:ee:ee:00:00:01,68:ee:ee:00:00:02",
+            &["-o", "ids", "clients", "list", "--self"],
+        );
+        assert!(o.status.success());
+        assert_eq!(stdout(&o), "nas-1-0002\nmacbook-pro-0001\n");
+    }
+
+    #[test]
+    fn clients_list_self_no_match_is_empty_and_ok() {
+        let o = run_self("02:00:00:00:00:99", &["clients", "list", "--self"]);
+        assert!(o.status.success());
+        assert_eq!(stdout(&o).lines().count(), 1, "header only");
+        assert!(
+            o.stderr.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&o.stderr)
+        );
+    }
+
+    #[test]
+    fn clients_list_self_combines_with_filters() {
+        // e0:f7:28:aa:bb:04 is the offline Kindle in the v2 history.
+        let macs = "68:ee:ee:00:00:02,e0:f7:28:aa:bb:04";
+        let ids = |args: &[&str]| {
+            let mut a = vec!["-o", "ids", "clients", "list", "--self"];
+            a.extend_from_slice(args);
+            stdout(&run_self(macs, &a))
+        };
+        assert_eq!(ids(&[]), "nas-1-0002\n");
+        assert_eq!(ids(&["--all"]), "nas-1-0002\nkindle-paperwhite-bb04\n");
+        assert_eq!(ids(&["--connection", "wireless"]), "");
+    }
+
+    #[test]
+    fn clients_list_self_json_is_the_list_shape() {
+        let o = run_self(
+            "68:ee:ee:00:00:02",
+            &["-o", "json", "clients", "list", "--self"],
+        );
+        let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+        let items = v["items"].as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"], "nas-1-0002");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn clients_list_self_read_failure() {
+        let o = Command::new(env!("CARGO_BIN_EXE_unifictl"))
+            .arg("--fixtures")
+            .arg(fixtures())
+            .args(["clients", "list", "--self"])
+            .env_remove("UNIFICTL_SELF_MACS")
+            .env("UNIFICTL_SYSFS", "/nonexistent/sys/class/net")
+            .output()
+            .unwrap();
+        assert!(!o.status.success());
+        assert!(o.stdout.is_empty());
+        assert!(
+            String::from_utf8_lossy(&o.stderr).contains("cannot read local network interfaces"),
+            "{}",
+            String::from_utf8_lossy(&o.stderr)
+        );
+    }
+
     #[test]
     fn clients_filters() {
         let ids = |args: &[&str]| -> String {
