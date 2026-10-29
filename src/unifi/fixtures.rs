@@ -6,8 +6,8 @@ use serde::de::DeserializeOwned;
 
 use super::UnifiApi;
 use super::types::{
-    ClientV2, Device, DpiEntry, Envelope, HealthSubsystem, LogQuery, NetworkConf, Sta,
-    SystemLogEntry, SystemLogPage, TrafficReport, WanHistory, WlanConf,
+    ClientV2, ConsoleSystem, Device, DpiEntry, Envelope, HealthSubsystem, LogQuery, NetworkConf,
+    Sta, SysInfo, SystemLogEntry, SystemLogPage, TrafficReport, WanHistory, WlanConf,
 };
 use crate::error::{Error, Result};
 
@@ -33,6 +33,11 @@ pub struct FixtureApi {
     /// `unifi-health.json`; `None` when absent, like a controller without
     /// the endpoint.
     pub health: Option<Vec<HealthSubsystem>>,
+    /// `unifi-sysinfo.json`; `None` when absent.
+    pub sysinfo: Option<Vec<SysInfo>>,
+    /// `unifi-system.json`, a bare object; `None` when absent, like a
+    /// controller without UniFi OS.
+    pub system: Option<ConsoleSystem>,
     /// Reads that fail, by method name (`"active_clients"`, …), simulating
     /// one endpoint being down.
     pub fail_only: Vec<&'static str>,
@@ -63,6 +68,8 @@ impl FixtureApi {
             dpi_categories: read_if_present(dir, "unifi-dpi-categories.json")?,
             dpi_apps: read_if_present(dir, "unifi-dpi-applications.json")?,
             health: read_if_present(dir, "unifi-health.json")?,
+            sysinfo: read_if_present(dir, "unifi-sysinfo.json")?,
+            system: read_object_optional(dir, "unifi-system.json")?,
             fail_only: Vec::new(),
             fail: false,
         })
@@ -193,6 +200,19 @@ impl UnifiApi for FixtureApi {
         self.check("health")?;
         self.health
             .clone()
+            .ok_or_else(|| Error::Unifi("unifi request: status 404".into()))
+    }
+    fn sysinfo(&self) -> Result<Vec<SysInfo>> {
+        self.check("sysinfo")?;
+        self.sysinfo
+            .clone()
+            .ok_or_else(|| Error::Unifi("unifi request: status 404".into()))
+    }
+    fn system(&self) -> Result<Option<ConsoleSystem>> {
+        self.check("system")?;
+        self.system
+            .clone()
+            .map(Some)
             .ok_or_else(|| Error::Unifi("unifi request: status 404".into()))
     }
 }
@@ -331,5 +351,15 @@ mod tests {
         let err = api.dpi_categories().unwrap_err().to_string();
         assert!(err.contains("needs an API key"), "{err}");
         assert!(api.dpi_applications().is_err());
+    }
+
+    #[test]
+    fn loads_sysinfo_and_system() {
+        let api = FixtureApi::load(&FixtureApi::default_dir()).unwrap();
+        assert_eq!(api.sysinfo().unwrap()[0].name, "console-01");
+        assert!(api.system().unwrap().unwrap().update_available());
+        let none = FixtureApi::default();
+        assert!(none.sysinfo().is_err());
+        assert!(none.system().is_err());
     }
 }

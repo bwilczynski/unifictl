@@ -828,7 +828,24 @@ impl Verdict {
 /// `unifictl status`: one row per area, in display order.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SiteStatus {
+    /// Which controller the report is about; `None` when `stat/sysinfo`
+    /// could not be read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub controller: Option<Controller>,
     pub rows: Vec<StatusRow>,
+}
+
+/// The controller's name and versions, from `stat/sysinfo`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Controller {
+    pub name: String,
+    /// UniFi OS; `None` on a legacy controller.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os_version: Option<String>,
+    /// The Network app.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network_version: Option<String>,
 }
 
 impl SiteStatus {
@@ -886,6 +903,9 @@ pub enum StatusArea {
     },
     Updates {
         updates: Vec<FirmwareUpdate>,
+        /// A pending UniFi OS update for the console itself.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        console: Option<ConsoleUpdate>,
     },
 }
 
@@ -916,6 +936,19 @@ pub struct PoorClient {
     pub id: String,
     pub name: String,
     pub experience: i64,
+}
+
+/// A UniFi OS update waiting on the console. The target version is not
+/// readable with an API key, so only the current one is known.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsoleUpdate {
+    pub name: String,
+    /// The installed UniFi OS version, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// Always true; present so JSON readers need not infer it.
+    pub update_available: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

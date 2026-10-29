@@ -111,6 +111,37 @@ pub struct Site {
     pub desc: String,
 }
 
+/// `stat/sysinfo`: the controller's name and versions.
+/// `console_display_version` is the UniFi OS version, empty on a legacy
+/// controller. Its `update_available` is the Network app's and is not read.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct SysInfo {
+    #[serde(deserialize_with = "nd")]
+    pub name: String,
+    #[serde(deserialize_with = "nd")]
+    pub version: String,
+    #[serde(deserialize_with = "nd")]
+    pub console_display_version: String,
+}
+
+/// UniFi OS `/api/system`: the console itself, outside the Network app.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ConsoleSystem {
+    #[serde(deserialize_with = "nd")]
+    pub name: String,
+    #[serde(rename = "deviceState", deserialize_with = "nd")]
+    pub device_state: String,
+}
+
+impl ConsoleSystem {
+    /// Whether a UniFi OS update is waiting to be installed.
+    pub fn update_available(&self) -> bool {
+        self.device_state == "updateAvailable"
+    }
+}
+
 /// One entry of `stat/health`: a subsystem (`wan`, `www`, `lan`, `wlan`,
 /// `vpn`) and the controller's verdict on it (`ok`, `warning`, `error`,
 /// `unknown`). The counts it also carries are not used.
@@ -919,5 +950,34 @@ mod tests {
         let h: WanHistory =
             serde_json::from_str(r#"{"dashboard_meta": null, "wan_history": null}"#).unwrap();
         assert!(h.dashboard_meta.is_none() && h.wan_history.is_none());
+    }
+
+    #[test]
+    fn console_system_update_available_only_on_exact_state() {
+        let s: ConsoleSystem =
+            serde_json::from_str(r#"{"name": "console-01", "deviceState": "updateAvailable"}"#)
+                .unwrap();
+        assert!(s.update_available());
+        assert_eq!(s.name, "console-01");
+        for state in [
+            r#"{"deviceState": "ready"}"#,
+            r#"{"deviceState": "updating"}"#,
+            r#"{"deviceState": null}"#,
+            r#"{}"#,
+        ] {
+            let s: ConsoleSystem = serde_json::from_str(state).unwrap();
+            assert!(!s.update_available(), "{state}");
+        }
+    }
+
+    #[test]
+    fn sysinfo_fields_default_when_missing() {
+        let s: SysInfo =
+            serde_json::from_str(r#"{"name": "controller-01", "version": "9.4.19"}"#).unwrap();
+        assert_eq!(
+            (s.name.as_str(), s.version.as_str()),
+            ("controller-01", "9.4.19")
+        );
+        assert_eq!(s.console_display_version, "");
     }
 }
