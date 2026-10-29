@@ -9,11 +9,11 @@ use super::common::{device_ref, map_device_type};
 use super::logs::{LogFilter, LogScope, to_model};
 use super::wans::{build_wan, find_gateway, outages};
 use crate::error::{Error, Result};
+use crate::health::{self, Health};
 use crate::model::{
     DeviceRef, DeviceTransition, DeviceType, FirmwareUpdate, LogSeverity, PoorClient, SiteStatus,
     StatusArea, StatusRow, Verdict, Wan, WanOutage, WanStatus,
 };
-use crate::render::health::{self, Health};
 use crate::unifi::fetch;
 use crate::unifi::types::{
     ClientV2, Device, HealthSubsystem, NetworkConf, SystemLogEntry, WanHistory,
@@ -151,10 +151,7 @@ fn wan_verdict(
             Verdict::Error
         };
     }
-    // Graded on the displayed value, like `style::availability`.
-    let availability = wan
-        .availability
-        .map(|p| health::availability((p * 100.0).round() / 100.0));
+    let availability = wan.availability.map(health::availability);
     let latency = wan.latency.map(health::latency);
     let degraded = [availability, latency]
         .into_iter()
